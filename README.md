@@ -171,15 +171,18 @@ This dashboard solves that by:
 
 ### Login Page
 
-![Login](screenshots/login.png)
+<img width="550" height="736" alt="Screenshot 2026-04-28 164956" src="https://github.com/user-attachments/assets/f4fbc194-6229-49e3-b89e-056aa9284c2d" />
+
 
 ### Dashboard
 
-![Dashboard](screenshots/dashboard.png)
+<img width="1234" height="973" alt="Screenshot 2026-04-28 165036" src="https://github.com/user-attachments/assets/edd6e56c-6ec1-4225-beac-a8c4384b3a93" />
+
 
 ### QR Code Generation
 
-![QR](screenshots/qr.png)
+<img width="711" height="1023" alt="Screenshot 2026-04-28 163213" src="https://github.com/user-attachments/assets/ed99bd4d-655c-4af3-bd9a-a02ad7c78b57" />
+
 
 ---
 
