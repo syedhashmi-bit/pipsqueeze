@@ -1,7 +1,7 @@
 # CONTEXT.md — Project Background & Architecture Decisions
 
 ## What Problem This Solves
-The owner runs a MikroTik router at home with a WireGuard VPN interface. Previously, managing VPN clients meant SSH-ing into the router and running commands manually. This dashboard replaces that with a web UI — similar to how Tailscale works but fully self-hosted and connecting directly to the MikroTik RouterOS API.
+The owner runs a MikroTik router at home with a WireGuard VPN interface. Previously, managing VPN clients meant SSH-ing into the router and running commands manually. PipSqueeze replaces that with a web UI — similar to how Tailscale works but fully self-hosted and connecting directly to the MikroTik RouterOS API.
 
 ## Infrastructure
 - **VPS**: Ubuntu 4GB RAM, Hetzner (Nuremberg)

@@ -1,4 +1,4 @@
-# MEMORY.md — Running Decision Log
+# MEMORY.md — PipSqueeze Running Decision Log
 
 This file tracks what has been built, what was fixed, and important decisions made. Update this after significant changes so future Claude Code sessions have full context.
 
