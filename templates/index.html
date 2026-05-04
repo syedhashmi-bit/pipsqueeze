@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VPN Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root{
+            --bg:#030508;--surface:#060c13;--panel:rgba(6,14,24,0.93);
+            --border:rgba(0,200,255,0.1);--border-lit:rgba(0,200,255,0.4);
+            --cyan:#00c8ff;--cyan-dim:rgba(0,200,255,0.07);
+            --green:#00ff9d;--green-dim:rgba(0,255,157,0.07);
+            --red:#ff4060;--red-dim:rgba(255,64,96,0.09);
+            --yellow:#ffc940;--yellow-dim:rgba(255,201,64,0.09);
+            --text:#c8e0ee;--muted:#3d6070;--muted-mid:#6a8ea0;
+            --mono:'Share Tech Mono',monospace;--display:'Rajdhani',sans-serif;
+        }
+        /* Light mode */
+        body.light{
+            --bg:#f0f4f8;--surface:#fff;--panel:rgba(255,255,255,0.95);
+            --border:rgba(0,100,160,0.12);--border-lit:rgba(0,100,160,0.4);
+            --cyan:#0077aa;--cyan-dim:rgba(0,119,170,0.07);
+            --green:#007a3d;--green-dim:rgba(0,122,61,0.07);
+            --red:#c0392b;--red-dim:rgba(192,57,43,0.08);
+            --yellow:#a07800;--yellow-dim:rgba(160,120,0,0.08);
+            --text:#1a2633;--muted:#7a8ea0;--muted-mid:#4a6070;
+        }
+        *{box-sizing:border-box;margin:0;padding:0;}
+        html{scroll-behavior:smooth;}
+        body{font-family:var(--display);background:var(--bg);color:var(--text);min-height:100vh;padding:28px 32px;overflow-x:hidden;transition:background .3s,color .3s;}
+        .bg-layer{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+        body.light .bg-layer{display:none;}
+        .grid-overlay{position:absolute;inset:0;background-image:linear-gradient(rgba(0,200,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,0.04) 1px,transparent 1px);background-size:44px 44px;animation:gridMove 20s linear infinite;}
+        @keyframes gridMove{to{background-position:44px 44px;}}
+        .scanlines{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.12) 3px,rgba(0,0,0,0.12) 4px);}
+        .gs{position:absolute;border-radius:50%;filter:blur(140px);}
+        .gs1{width:900px;height:900px;background:#001830;top:-350px;left:-300px;opacity:.5;}
+        .gs2{width:600px;height:600px;background:#001020;bottom:-200px;right:-200px;opacity:.4;}
+        .stream{position:absolute;width:1px;background:linear-gradient(to bottom,transparent,var(--cyan),transparent);animation:streamDrop linear infinite;opacity:0;}
+        @keyframes streamDrop{0%{top:-20%;opacity:0;}5%{opacity:.4;}95%{opacity:.4;}100%{top:120%;opacity:0;}}
+        .page{max-width:1300px;margin:auto;position:relative;z-index:1;}
+
+        /* TOPBAR */
+        .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid var(--border);animation:fadeDown .5s ease both;}
+        @keyframes fadeDown{from{opacity:0;transform:translateY(-14px);}to{opacity:1;transform:translateY(0);}}
+        .brand-row{display:flex;align-items:center;gap:12px;margin-bottom:8px;}
+        .brand-icon{width:40px;height:40px;border-radius:6px;background:var(--cyan-dim);border:1px solid rgba(0,200,255,0.2);display:flex;align-items:center;justify-content:center;font-size:18px;}
+        .brand-label{font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--cyan);opacity:.7;}
+        h1{font-size:28px;font-weight:700;letter-spacing:.05em;color:var(--text);line-height:1.1;}
+        .page-sub{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:5px;}
+        .nav-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;padding-top:4px;}
+
+        /* NOTIFICATION BELL */
+        .notif-bell{position:relative;cursor:pointer;background:var(--cyan-dim);border:1px solid var(--border-lit);color:var(--cyan);padding:9px 13px;border-radius:3px;font-size:15px;display:flex;align-items:center;transition:all .2s;}
+        .notif-bell:hover{background:rgba(0,200,255,0.12);}
+        .notif-count{position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-family:var(--mono);font-size:10px;font-weight:700;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid var(--bg);}
+        .notif-count:empty{display:none;}
+        .notif-drop{position:absolute;top:calc(100% + 8px);right:0;background:#080f18;border:1px solid rgba(0,200,255,0.2);border-radius:5px;width:280px;z-index:200;box-shadow:0 20px 50px rgba(0,0,0,0.6);display:none;}
+        .notif-drop.open{display:block;}
+        .notif-item{padding:12px 14px;border-bottom:1px solid rgba(0,200,255,0.07);font-family:var(--mono);font-size:12px;}
+        .notif-item:last-child{border-bottom:none;}
+        .notif-item.warn{color:var(--yellow);}
+        .notif-item.info{color:var(--cyan);}
+        .notif-empty{padding:16px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--muted);}
+
+        /* THEME TOGGLE */
+        .theme-btn{background:var(--cyan-dim);border:1px solid var(--border-lit);color:var(--cyan);padding:9px 13px;border-radius:3px;font-size:15px;cursor:pointer;transition:all .2s;}
+        .theme-btn:hover{background:rgba(0,200,255,0.12);}
+
+        /* BUTTONS */
+        .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 15px;border-radius:3px;font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.06em;cursor:pointer;text-decoration:none;transition:all .2s;white-space:nowrap;border:none;}
+        .btn-ghost{background:transparent;border:1px solid var(--border-lit);color:var(--cyan);}
+        .btn-ghost:hover{background:var(--cyan-dim);box-shadow:0 0 18px rgba(0,200,255,0.12);}
+        .btn-danger{background:var(--red-dim);border:1px solid rgba(255,64,96,0.3);color:var(--red);}
+        .btn-danger:hover{background:rgba(255,64,96,0.14);}
+        .btn-green{background:var(--green-dim);border:1px solid rgba(0,255,157,0.3);color:var(--green);}
+        .btn-green:hover{background:rgba(0,255,157,0.12);}
+        .btn-yellow{background:var(--yellow-dim);border:1px solid rgba(255,201,64,0.3);color:var(--yellow);}
+        .btn-sm{padding:6px 11px;font-size:11.5px;}
+        .btn-generate{width:100%;padding:14px;background:transparent;border:1px solid var(--cyan);border-radius:3px;color:var(--cyan);font-family:var(--display);font-size:15px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;cursor:pointer;position:relative;overflow:hidden;transition:color .25s,box-shadow .25s;}
+        .btn-generate .fill{position:absolute;inset:0;background:var(--cyan);transform:scaleX(0);transform-origin:left;transition:transform .3s cubic-bezier(.22,1,.36,1);z-index:0;}
+        .btn-generate:hover .fill{transform:scaleX(1);}
+        .btn-generate:hover{color:#000;box-shadow:0 0 26px rgba(0,200,255,0.28);}
+        .btn-generate:disabled{opacity:.45;cursor:not-allowed;}
+        .btn-generate span{position:relative;z-index:1;}
+
+        /* SYS STRIP */
+        .sys-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;animation:fadeUp .5s .04s ease both;}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+        .sys-card{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:14px 16px;transition:border-color .25s,transform .2s;}
+        .sys-card:hover{border-color:rgba(0,200,255,0.22);transform:translateY(-2px);}
+        .rel-time{font-family:var(--mono);font-size:11px;color:var(--muted-mid);font-style:italic;}
+        .sys-label{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;}
+        .sys-val{font-size:20px;font-weight:700;letter-spacing:-.02em;}
+        .sys-sub{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:4px;}
+        .mt-status{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:13px;font-weight:700;}
+        .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+        .dot-green{background:var(--green);box-shadow:0 0 7px var(--green);animation:blink 1.4s step-end infinite;}
+        .dot-red{background:var(--red);}
+        @keyframes blink{0%,100%{opacity:1;}50%{opacity:0;}}
+        .bar-wrap{height:4px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:8px;overflow:hidden;}
+        body.light .bar-wrap{background:rgba(0,0,0,0.08);}
+        .bar-fill{height:100%;border-radius:2px;transition:width .6s ease;}
+        .bar-cyan{background:var(--cyan);}
+        .bar-green{background:var(--green);}
+        .bar-yellow{background:var(--yellow);}
+        .bar-red{background:var(--red);}
+
+        /* STATS ROW */
+        .stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px;animation:fadeUp .5s .07s ease both;}
+        .stat-card{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:18px 20px;position:relative;overflow:hidden;transition:border-color .25s,transform .2s;}
+        .stat-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);transform:scaleX(0);transition:transform .3s;}
+        .stat-card:hover{border-color:rgba(0,200,255,0.25);transform:translateY(-2px);}
+        .stat-card:hover::after{transform:scaleX(1);}
+        .stat-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
+        .stat-val{font-size:32px;font-weight:700;color:var(--cyan);letter-spacing:-.02em;}
+        .stat-note{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:5px;}
+
+        /* EXPIRY WARN BANNER */
+        .expiry-banner{background:rgba(255,201,64,0.06);border:1px solid rgba(255,201,64,0.2);border-left:3px solid var(--yellow);border-radius:4px;padding:12px 16px;margin-bottom:16px;font-family:var(--mono);font-size:12.5px;color:var(--yellow);display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+
+        /* TAG FILTER BAR */
+        .tag-bar{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;animation:fadeUp .5s .09s ease both;}
+        .tag-label{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.1em;}
+        .tag-btn{padding:5px 12px;border-radius:2px;font-family:var(--mono);font-size:11px;cursor:pointer;text-decoration:none;border:1px solid var(--border);color:var(--muted-mid);background:transparent;transition:all .2s;}
+        .tag-btn:hover,.tag-btn.active{border-color:var(--cyan);color:var(--cyan);background:var(--cyan-dim);}
+        .tag-pill{display:inline-block;padding:2px 8px;border-radius:2px;font-family:var(--mono);font-size:11px;background:var(--cyan-dim);color:var(--cyan);border:1px solid rgba(0,200,255,0.15);margin:1px;}
+
+        /* MAIN GRID */
+        .main-grid{display:grid;grid-template-columns:.85fr 1.45fr;gap:18px;animation:fadeUp .5s .11s ease both;}
+
+        /* PANEL */
+        .panel{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:22px;margin-bottom:16px;position:relative;overflow:hidden;transition:border-color .25s;}
+        .panel:last-child{margin-bottom:0;}
+        .panel:hover{border-color:rgba(0,200,255,0.18);}
+        .panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,200,255,0.3),transparent);opacity:0;transition:opacity .3s;}
+        .panel:hover::before{opacity:1;}
+        .panel-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);}
+        .panel-title{font-size:15px;font-weight:700;letter-spacing:.06em;color:var(--text);display:flex;align-items:center;gap:8px;}
+        .chip{font-family:var(--mono);font-size:10.5px;padding:4px 9px;border-radius:2px;background:var(--cyan-dim);border:1px solid rgba(0,200,255,0.15);color:var(--cyan);}
+        .chip-green{background:var(--green-dim);border-color:rgba(0,255,157,0.15);color:var(--green);}
+        .chip-red{background:var(--red-dim);border-color:rgba(255,64,96,0.15);color:var(--red);}
+        .chip-yellow{background:var(--yellow-dim);border-color:rgba(255,201,64,0.15);color:var(--yellow);}
+
+        /* FORM */
+        label.fl{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;color:var(--cyan);opacity:.7;text-transform:uppercase;margin-bottom:7px;}
+        .input-row{position:relative;display:flex;align-items:center;margin-bottom:7px;}
+        .i-icon{position:absolute;left:11px;font-size:13px;color:var(--cyan);opacity:.3;pointer-events:none;}
+        input[type=text],input[type=search],input[type=date],textarea{width:100%;padding:11px 11px 11px 34px;background:rgba(0,200,255,0.04);border:1px solid rgba(0,200,255,0.13);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;transition:all .2s;}
+        body.light input[type=text],body.light input[type=search],body.light input[type=date],body.light textarea{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.15);}
+        input[type=text]:focus,input[type=search]:focus,input[type=date]:focus,textarea:focus{border-color:var(--cyan);background:rgba(0,200,255,0.07);box-shadow:0 0 0 3px rgba(0,200,255,0.08);}
+        input::placeholder,textarea::placeholder{color:rgba(61,96,112,0.6);}
+        textarea{resize:vertical;min-height:56px;padding-left:12px;}
+        input[type=date]{color-scheme:dark;}
+        body.light input[type=date]{color-scheme:light;}
+        .helper{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:13px;}
+        .field-gap{margin-bottom:13px;}
+
+        /* LOADER */
+        .loader-wrap{display:none;text-align:center;padding:16px;font-family:var(--mono);font-size:12px;color:var(--cyan);letter-spacing:.1em;}
+        .loader{display:inline-block;width:26px;height:26px;border:2px solid rgba(0,200,255,0.15);border-top:2px solid var(--cyan);border-radius:50%;animation:spin .75s linear infinite;margin-bottom:8px;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+
+        /* SEARCH BAR */
+        .search-form{display:flex;gap:8px;margin-bottom:12px;}
+        .search-form input{flex:1;min-width:0;}
+        .search-form button{flex-shrink:0;}
+
+        /* TABLE */
+        .table-shell{border:1px solid rgba(0,200,255,0.08);border-radius:4px;overflow:hidden;}
+        table{width:100%;border-collapse:collapse;}
+        th{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);background:rgba(0,200,255,0.02);}
+        td{padding:11px 12px;font-size:13px;border-bottom:1px solid rgba(0,200,255,0.05);vertical-align:middle;}
+        tr:last-child td{border-bottom:none;}
+        tr:hover td{background:rgba(0,200,255,0.02);}
+        .client-name{font-family:var(--display);font-weight:700;font-size:14px;color:var(--text);}
+        .client-note{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px;}
+        .client-ip{font-family:var(--mono);font-size:12px;color:var(--cyan);}
+        .client-exp{font-family:var(--mono);font-size:11px;color:var(--yellow);margin-top:2px;}
+        .client-seen{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px;}
+        .client-data{font-family:var(--mono);font-size:11px;color:var(--muted-mid);margin-top:2px;}
+        .row-actions{display:flex;gap:5px;flex-wrap:wrap;}
+        .row-actions form{margin:0;}
+
+        /* BULK */
+        .bulk-bar{display:none;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:rgba(0,200,255,0.05);border:1px solid rgba(0,200,255,0.15);border-radius:3px;margin-bottom:10px;}
+        .bulk-bar.visible{display:flex;}
+        .bulk-count{font-family:var(--mono);font-size:12px;color:var(--cyan);}
+        input[type=checkbox]{accent-color:var(--cyan);width:14px;height:14px;cursor:pointer;}
+
+        /* PAGINATION */
+        .pagination{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap;}
+        .page-btn{padding:6px 13px;border-radius:3px;font-family:var(--mono);font-size:12px;cursor:pointer;text-decoration:none;border:1px solid var(--border);color:var(--muted-mid);background:transparent;transition:all .2s;}
+        .page-btn:hover,.page-btn.active{border-color:var(--cyan);color:var(--cyan);background:var(--cyan-dim);}
+        .page-btn.disabled{opacity:.35;pointer-events:none;}
+        .page-info{font-family:var(--mono);font-size:11px;color:var(--muted);}
+
+        /* EMPTY */
+        .empty-state{text-align:center;padding:36px 20px;border:1px dashed rgba(0,200,255,0.12);border-radius:4px;background:rgba(0,200,255,0.02);}
+        .empty-icon{font-size:28px;margin-bottom:10px;opacity:.3;}
+        .empty-title{font-size:15px;font-weight:600;color:var(--muted-mid);margin-bottom:5px;}
+        .empty-sub{font-family:var(--mono);font-size:11.5px;color:var(--muted);}
+
+        /* LOGS */
+        .log-feed{display:flex;flex-direction:column;gap:7px;max-height:250px;overflow-y:auto;}
+        .log-feed::-webkit-scrollbar{width:3px;}
+        .log-feed::-webkit-scrollbar-thumb{background:rgba(0,200,255,0.2);border-radius:2px;}
+        .log-entry{padding:10px 13px;border-radius:3px;background:rgba(0,200,255,0.03);border:1px solid rgba(0,200,255,0.07);border-left:2px solid rgba(0,200,255,0.25);transition:all .2s;}
+        .log-entry:hover{background:rgba(0,200,255,0.05);border-left-color:var(--cyan);}
+        .log-action{font-family:var(--display);font-weight:600;font-size:13.5px;color:var(--text);margin-bottom:3px;}
+        .log-time{font-family:var(--mono);font-size:10.5px;color:var(--muted);}
+
+        /* RIGHT PANEL */
+        .right-panel{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:24px;position:sticky;top:16px;height:fit-content;overflow:hidden;}
+        .right-panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.35;}
+        .config-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+        pre{background:rgba(0,0,0,0.4);padding:14px;border-radius:4px;border:1px solid var(--border);color:#9ee4ff;font-family:var(--mono);font-size:12px;line-height:1.7;white-space:pre-wrap;max-height:340px;overflow-y:auto;}
+        body.light pre{background:rgba(0,0,0,0.06);color:#0a4060;}
+        pre::-webkit-scrollbar{width:3px;}
+        pre::-webkit-scrollbar-thumb{background:rgba(0,200,255,0.2);border-radius:2px;}
+        .section-head{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;color:var(--cyan);opacity:.6;text-transform:uppercase;margin:14px 0 8px;}
+        .qr-box{margin-top:16px;padding:18px;text-align:center;border:1px solid rgba(0,255,157,0.18);border-radius:4px;background:var(--green-dim);position:relative;}
+        .qr-box::before{content:'QR CODE';position:absolute;top:-9px;left:14px;background:var(--surface);padding:0 7px;font-family:var(--mono);font-size:10px;color:var(--green);letter-spacing:.15em;}
+        .qr-title{font-size:14px;font-weight:700;color:var(--green);margin-bottom:3px;}
+        .qr-sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:12px;}
+        img.qr-img{background:#fff;padding:10px;border-radius:6px;display:block;margin:auto;}
+        .portal-link-box{font-family:var(--mono);font-size:11px;color:var(--cyan);word-break:break-all;padding:10px;background:var(--cyan-dim);border:1px solid rgba(0,200,255,0.12);border-radius:3px;margin-top:12px;}
+        .ready-state{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;text-align:center;gap:10px;}
+        .ready-icon{font-size:34px;opacity:.2;animation:floatIcon 3s ease-in-out infinite alternate;}
+        @keyframes floatIcon{0%{transform:translateY(0);opacity:.18;}100%{transform:translateY(-6px);opacity:.3;}}
+        .ready-title{font-size:16px;font-weight:700;color:var(--muted-mid);}
+        .ready-sub{font-family:var(--mono);font-size:12px;color:var(--muted);max-width:250px;line-height:1.6;}
+
+        /* MODAL */
+        .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:500;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+        .modal-bg.open{display:flex;}
+        .modal{background:#080f18;border:1px solid rgba(0,200,255,0.2);border-radius:6px;padding:26px;width:100%;max-width:420px;box-shadow:0 40px 80px rgba(0,0,0,0.7);position:relative;}
+        body.light .modal{background:#f8fafc;}
+        .modal-title{font-size:17px;font-weight:700;letter-spacing:.05em;color:var(--text);margin-bottom:16px;}
+        .modal-close{position:absolute;top:12px;right:14px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;}
+        .modal-close:hover{color:var(--text);}
+
+        /* TOAST */
+        .toast{position:fixed;bottom:22px;right:22px;padding:12px 17px;border-radius:4px;font-family:var(--mono);font-size:12.5px;display:none;z-index:9999;backdrop-filter:blur(12px);border-left:2px solid var(--cyan);background:rgba(0,14,28,0.95);color:var(--cyan);box-shadow:0 16px 40px rgba(0,0,0,0.5);letter-spacing:.04em;max-width:320px;}
+        .toast.err{border-left-color:var(--red);color:#ff8090;}
+        body.light .toast{background:rgba(240,248,255,0.97);}
+
+        /* ACCESS MODE SELECTOR */
+        .access-mode-group{display:flex;gap:6px;margin-bottom:6px;}
+        .access-btn{flex:1;padding:9px 6px;border-radius:3px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;cursor:pointer;border:1px solid var(--border-lit);color:var(--muted-mid);background:transparent;transition:all .2s;text-transform:uppercase;}
+        .access-btn:hover{border-color:var(--cyan);color:var(--cyan);background:var(--cyan-dim);}
+        .access-btn.am-active-internet{border-color:var(--cyan);color:var(--cyan);background:var(--cyan-dim);box-shadow:0 0 10px rgba(0,200,255,0.1);}
+        .access-btn.am-active-lan{border-color:var(--yellow);color:var(--yellow);background:var(--yellow-dim);box-shadow:0 0 10px rgba(255,201,64,0.1);}
+        .access-btn.am-active-full{border-color:var(--green);color:var(--green);background:var(--green-dim);box-shadow:0 0 10px rgba(0,255,157,0.1);}
+        /* ACCESS MODE BADGES */
+        .badge-inet{display:inline-block;padding:2px 7px;border-radius:2px;font-family:var(--mono);font-size:10px;background:var(--cyan-dim);color:var(--cyan);border:1px solid rgba(0,200,255,0.2);}
+        .badge-lan{display:inline-block;padding:2px 7px;border-radius:2px;font-family:var(--mono);font-size:10px;background:var(--yellow-dim);color:var(--yellow);border:1px solid rgba(255,201,64,0.2);}
+        .badge-full{display:inline-block;padding:2px 7px;border-radius:2px;font-family:var(--mono);font-size:10px;background:var(--green-dim);color:var(--green);border:1px solid rgba(0,255,157,0.2);}
+
+        /* RESPONSIVE */
+        @media(max-width:1080px){.main-grid{grid-template-columns:1fr;}.right-panel{position:static;}}
+        @media(max-width:800px){body{padding:16px;}.topbar{flex-direction:column;}.nav-actions{justify-content:flex-start;}.sys-strip,.stats-row{grid-template-columns:1fr 1fr;}}
+        @media(max-width:500px){.sys-strip,.stats-row{grid-template-columns:1fr;}}
+    </style>
+</head>
+<body id="mainBody">
+<div class="bg-layer">
+    <div class="grid-overlay"></div><div class="scanlines"></div>
+    <div class="gs gs1"></div><div class="gs gs2"></div>
+</div>
+<script>
+    // Inject streams
+    const bg=document.querySelector('.bg-layer');
+    for(let i=0;i<8;i++){const s=document.createElement('div');s.className='stream';s.style.cssText=`left:${Math.random()*100}%;height:${Math.random()*18+10}%;animation-duration:${Math.random()*8+6}s;animation-delay:${Math.random()*12}s;`;bg.appendChild(s);}
+    // Apply saved theme
+    if(localStorage.getItem('theme')==='light')document.getElementById('mainBody').classList.add('light');
+</script>
+
+<div class="page">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+        <div>
+            <div class="brand-row"><div class="brand-icon">⚡</div><span class="brand-label">WIREGUARD ACCESS PANEL</span></div>
+            <h1>VPN DASHBOARD</h1>
+            <p class="page-sub">// CREATE · MANAGE · MONITOR · INFRASTRUCTURE</p>
+        </div>
+        <div class="nav-actions">
+            <!-- Notification Bell -->
+            <div style="position:relative;">
+                <button class="notif-bell" id="notifBtn" onclick="toggleNotif()" title="Alerts">
+                    🔔
+                    <span class="notif-count" id="notifCount">{% if expiring_soon %}{{ expiring_soon|length }}{% endif %}</span>
+                </button>
+                <div class="notif-drop" id="notifDrop">
+                    {% if expiring_soon %}
+                        {% for c in expiring_soon %}
+                        <div class="notif-item warn">⏳ {{ c.name }} expires {{ c.expires_at }}</div>
+                        {% endfor %}
+                    {% else %}
+                    <div class="notif-empty">// No alerts</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Theme toggle -->
+            <button class="theme-btn" onclick="toggleTheme()" title="Toggle dark/light">🌓</button>
+
+            <a href="{{ url_for('wireguard') }}" target="_blank" rel="noopener noreferrer">
+                <button class="btn btn-ghost" type="button">📡 PEERS</button>
+            </a>
+            <a href="{{ url_for('notifications_page') }}">
+                <button class="btn btn-ghost" type="button">🔔 ALERTS</button>
+            </a>
+            <a href="{{ url_for('security_page') }}">
+                <button class="btn btn-ghost" type="button">🔒 SECURITY</button>
+            </a>
+            <a href="{{ url_for('weekly_report') }}">
+                <button class="btn btn-ghost" type="button">📊 REPORT</button>
+            </a>
+            <a href="{{ url_for('map_view') }}">
+                <button class="btn btn-ghost" type="button">🗺 MAP</button>
+            </a>
+            <a href="{{ url_for('export_csv') }}">
+                <button class="btn btn-ghost" type="button">⬇ CSV</button>
+            </a>
+            <a href="{{ url_for('backup') }}">
+                <button class="btn btn-ghost" type="button">⬇ BACKUP</button>
+            </a>
+            <form method="post" action="{{ url_for('reset_db') }}" onsubmit="return confirm('Wipe all records?');">
+                <button class="btn btn-danger" type="submit">RESET DB</button>
+            </form>
+            <form method="post" action="{{ url_for('reset_all') }}" onsubmit="return confirmResetAll();">
+                <button class="btn btn-danger" type="submit">⚠ RESET ALL</button>
+            </form>
+            <a href="{{ url_for('logout') }}"><button class="btn btn-ghost" type="button">LOGOUT</button></a>
+        </div>
+    </div>
+
+    <!-- EXPIRY BANNER -->
+    {% if expiring_soon %}
+    <div class="expiry-banner">
+        ⚠ &nbsp;
+        {% for c in expiring_soon %}
+        <strong>{{ c.name }}</strong> expires {{ c.expires_at }}{% if not loop.last %} &nbsp;·&nbsp; {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- SYS STRIP -->
+    <div class="sys-strip">
+        <div class="sys-card">
+            <div class="sys-label">// MIKROTIK API</div>
+            {% if mt_ok %}
+            <div class="mt-status"><span class="dot dot-green"></span><span style="color:var(--green)">CONNECTED</span></div>
+            {% else %}
+            <div class="mt-status"><span class="dot dot-red"></span><span style="color:var(--red)">UNREACHABLE</span></div>
+            {% endif %}
+            <div class="sys-sub" id="mtCheck" style="cursor:pointer;" onclick="recheckMT()">click to recheck</div>
+        </div>
+        <div class="sys-card">
+            <div class="sys-label">// CPU</div>
+            <div class="sys-val" id="cpuVal" style="color:var(--cyan);">{{ sys_stats.cpu }}%</div>
+            <div class="bar-wrap"><div class="bar-fill bar-cyan" id="cpuBar" style="width:{{ sys_stats.cpu }}%"></div></div>
+        </div>
+        <div class="sys-card">
+            <div class="sys-label">// RAM</div>
+            <div class="sys-val" id="ramVal" style="color:{% if sys_stats.ram>85 %}var(--red){% elif sys_stats.ram>65 %}var(--yellow){% else %}var(--green){% endif %};">{{ sys_stats.ram }}%</div>
+            <div class="bar-wrap"><div class="bar-fill {% if sys_stats.ram>85 %}bar-red{% elif sys_stats.ram>65 %}bar-yellow{% else %}bar-green{% endif %}" id="ramBar" style="width:{{ sys_stats.ram }}%"></div></div>
+        </div>
+        <div class="sys-card">
+            <div class="sys-label">// DISK</div>
+            <div class="sys-val" id="diskVal" style="color:{% if sys_stats.disk>85 %}var(--red){% elif sys_stats.disk>65 %}var(--yellow){% else %}var(--cyan){% endif %};">{{ sys_stats.disk }}%</div>
+            <div class="bar-wrap"><div class="bar-fill {% if sys_stats.disk>85 %}bar-red{% elif sys_stats.disk>65 %}bar-yellow{% else %}bar-cyan{% endif %}" id="diskBar" style="width:{{ sys_stats.disk }}%"></div></div>
+            <div class="sys-sub" id="uptimeVal">up {{ (sys_stats.uptime//3600) }}h {{ ((sys_stats.uptime%3600)//60) }}m</div>
+        </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-label">// TOTAL CLIENTS</div>
+            <div class="stat-val">{{ all_clients_count }}</div>
+            <div class="stat-note">Saved in dashboard DB</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">// USED IPs</div>
+            <div class="stat-val">{{ used_ips }}</div>
+            <div class="stat-note">Allocated from pool</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">// AVAILABLE IPs</div>
+            <div class="stat-val" style="color:var(--green);">{{ available_ips }}</div>
+            <div class="stat-note">Remaining addresses</div>
+        </div>
+    </div>
+
+    <!-- TAG FILTER -->
+    {% if all_tags %}
+    <div class="tag-bar">
+        <span class="tag-label">// FILTER TAG:</span>
+        <a class="tag-btn {% if not active_tag %}active{% endif %}" href="/?search={{ search }}">ALL</a>
+        {% for tag_name, tag_count in all_tags %}
+        <a class="tag-btn {% if active_tag == tag_name %}active{% endif %}" href="/?tag={{ tag_name }}&search={{ search }}">{{ tag_name }} <span style="opacity:.6;">({{ tag_count }})</span></a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- MAIN GRID -->
+    <div class="main-grid">
+
+        <!-- LEFT -->
+        <div>
+
+            <!-- CREATE CLIENT -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">◈ CREATE CLIENT</span>
+                    <span class="chip chip-green">NEW</span>
+                </div>
+                <form method="post" onsubmit="showLoader()">
+                    <label class="fl">Client Name</label>
+                    <div class="input-row field-gap">
+                        <span class="i-icon">›</span>
+                        <input type="text" name="client" id="clientNameInput" placeholder="e.g. phone_1" required>
+                    </div>
+                    <div class="helper">// Letters, numbers, underscores only</div>
+
+                    <label class="fl">Tags (comma-separated)</label>
+                    <div class="input-row field-gap">
+                        <span class="i-icon">#</span>
+                        <input type="text" name="tags" placeholder="mobile, office, guest">
+                    </div>
+
+                    <label class="fl">Notes (optional)</label>
+                    <div class="field-gap">
+                        <textarea name="notes" placeholder="John's laptop, Office router..."></textarea>
+                    </div>
+
+                    <label class="fl">Expiry Date (optional)</label>
+                    <div class="input-row" style="margin-bottom:14px;">
+                        <span class="i-icon">📅</span>
+                        <input type="date" name="expires_at">
+                    </div>
+
+                    <label class="fl">Location (optional)</label>
+                    <div style="display:flex;gap:8px;margin-bottom:8px;">
+                        <div class="input-row" style="flex:1;margin-bottom:0;">
+                            <span class="i-icon">📍</span>
+                            <input type="text" name="location" id="createLocation"
+                                placeholder="e.g. Sydney, Australia"
+                                onkeydown="if(event.key==='Enter'){event.preventDefault();geocode('create');}">
+                        </div>
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="geocode('create')" id="createGeoBtn" title="Look up coordinates">🔍 LOOKUP</button>
+                    </div>
+                    <div id="createGeoStatus" style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:8px;min-height:16px;"></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px;">
+                        <div class="input-row" style="margin-bottom:0;">
+                            <span class="i-icon" style="font-size:11px;">LAT</span>
+                            <input type="text" name="lat" id="createLat" placeholder="-33.8688" style="padding-left:40px;">
+                        </div>
+                        <div class="input-row" style="margin-bottom:0;">
+                            <span class="i-icon" style="font-size:11px;">LON</span>
+                            <input type="text" name="lon" id="createLon" placeholder="151.2093" style="padding-left:40px;">
+                        </div>
+                    </div>
+
+                    <label class="fl" style="margin-top:6px;">LAN Access Mode</label>
+                    <input type="hidden" name="access_mode" id="createAccessMode" value="internet">
+                    <div class="access-mode-group">
+                        <button type="button" class="access-btn am-active-internet" id="createBtn_internet" onclick="setAccessMode('create','internet',this)">INTERNET ONLY</button>
+                        <button type="button" class="access-btn" id="createBtn_lan" onclick="setAccessMode('create','lan',this)">LAN ONLY</button>
+                        <button type="button" class="access-btn" id="createBtn_full" onclick="setAccessMode('create','full',this)">FULL ACCESS</button>
+                    </div>
+                    <div class="helper" id="createAccessDesc" style="margin-bottom:18px;">// Routes all internet traffic through VPN (0.0.0.0/0)</div>
+
+                    <button class="btn-generate" id="generateButton" type="submit">
+                        <div class="fill"></div><span>GENERATE CLIENT →</span>
+                    </button>
+                </form>
+                <div id="loaderWrap" class="loader-wrap">
+                    <div class="loader"></div><br>GENERATING...
+                </div>
+            </div>
+
+            <!-- CLIENT LIST -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">◉ CLIENT LIST</span>
+                    <span class="chip">{{ total_clients }} / {{ all_clients_count }}</span>
+                </div>
+
+                <!-- Search -->
+                <form class="search-form" method="get" action="/">
+                    {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag }}">{% endif %}
+                    <div class="input-row" style="flex:1;margin-bottom:0;">
+                        <span class="i-icon">⌕</span>
+                        <input type="search" name="search" value="{{ search }}" placeholder="Search name, IP, notes, tags...">
+                    </div>
+                    <button class="btn btn-ghost btn-sm" type="submit">SEARCH</button>
+                    {% if search or active_tag %}
+                    <a href="/"><button class="btn btn-sm" style="background:var(--red-dim);border:1px solid rgba(255,64,96,.3);color:var(--red);" type="button">✕</button></a>
+                    {% endif %}
+                </form>
+
+                {% if clients %}
+                <!-- BULK BAR -->
+                <div class="bulk-bar" id="bulkBar">
+                    <span class="bulk-count" id="bulkCount">0 selected</span>
+                    <form method="post" action="{{ url_for('bulk_action') }}" id="bulkForm" style="display:flex;gap:7px;flex-wrap:wrap;">
+                        <button class="btn btn-green btn-sm" type="submit" name="bulk_action" value="enable">ENABLE</button>
+                        <button class="btn btn-yellow btn-sm" type="submit" name="bulk_action" value="disable">DISABLE</button>
+                        <button class="btn btn-danger btn-sm" type="submit" name="bulk_action" value="delete" onclick="return confirm('Delete all selected?')">DELETE</button>
+                    </form>
+                </div>
+
+                <div class="table-shell" style="margin-top:10px;">
+                    <table id="clientTable">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+                                <th>Client</th>
+                                <th>IP / Data</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in clients %}
+                            <tr>
+                                <td><input type="checkbox" class="row-check" data-name="{{ c.name }}" onchange="updateBulkBar()"></td>
+                                <td>
+                                    <div class="client-name">{{ c.name }}</div>
+                                    {% if c.tags %}
+                                    <div style="margin-top:3px;">
+                                        {% for t in c.tags.split(',') %}{% if t.strip() %}<span class="tag-pill">{{ t.strip() }}</span>{% endif %}{% endfor %}
+                                    </div>
+                                    {% endif %}
+                                    {% if c.notes %}<div class="client-note">{{ c.notes }}</div>{% endif %}
+                                    {% if c.expires_at %}<div class="client-exp">⏳ {{ c.expires_at }}</div>{% endif %}
+                                    {% if c.last_seen %}<div class="client-seen">👁 <span class="rel-time" data-ts="{{ c.last_seen }}">{{ c.last_seen }}</span></div>{% endif %}
+                                    <div class="client-seen" style="opacity:.5;">🕐 <span class="rel-time" data-ts="{{ c.created_at }}">{{ c.created_at }}</span></div>
+                                </td>
+                                <td>
+                                    <span class="client-ip" id="ip-{{ loop.index }}">{{ c.ip }}</span>
+                                    <button class="btn btn-ghost btn-sm" style="padding:3px 7px;font-size:10px;margin-left:4px;" onclick="copyIP('{{ c.ip }}')" title="Copy IP">⎘</button>
+                                    {% if c.total_rx or c.total_tx %}
+                                    <div class="client-data">↓{{ (c.total_rx/1048576)|round(2) }}MB ↑{{ (c.total_tx/1048576)|round(2) }}MB</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if c.disabled %}<span class="chip chip-red">OFF</span>
+                                    {% else %}<span class="chip chip-green">ON</span>{% endif %}
+                                    <div style="margin-top:5px;">
+                                        {% if c.access_mode == 'lan' %}<span class="badge-lan">LAN</span>
+                                        {% elif c.access_mode == 'full' %}<span class="badge-full">FULL</span>
+                                        {% else %}<span class="badge-inet">INET</span>{% endif %}
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="row-actions">
+                                        <a href="{{ url_for('download', client=c.name) }}">
+                                            <button class="btn btn-ghost btn-sm" type="button" title="Download config">↓</button>
+                                        </a>
+                                        <form method="post" action="{{ url_for('toggle_client', client=c.name) }}">
+                                            <button class="btn {% if c.disabled %}btn-green{% else %}btn-yellow{% endif %} btn-sm" type="submit" title="Toggle enable/disable">
+                                                {% if c.disabled %}▶{% else %}⏸{% endif %}
+                                            </button>
+                                        </form>
+                                        <button class="btn btn-ghost btn-sm" onclick="openRename('{{ c.name }}')" title="Rename">✎</button>
+                                        <button class="btn btn-ghost btn-sm" onclick="openEdit('{{ c.name }}','{{ c.notes|replace("'","\\'") }}','{{ c.expires_at or "" }}','{{ c.tags or "" }}','{{ c.location or "" }}','{{ c.lat or "" }}','{{ c.lon or "" }}','{{ c.access_mode or "internet" }}')" title="Edit settings">⚙</button>
+                                        <button class="btn btn-ghost btn-sm" onclick="openClone('{{ c.name }}')" title="Clone client">⎘</button>
+                                        <button class="btn btn-ghost btn-sm" onclick="copyPortal('{{ url_for("portal", token=c.portal_token, _external=True) }}')" title="Copy portal link">🔗</button>
+                                        <form method="post" action="{{ url_for('rotate_portal', client=c.name) }}" onsubmit="return confirm('Rotate portal link for {{ c.name }}? Old link stops working.')">
+                                            <button class="btn btn-yellow btn-sm" type="submit" title="Rotate portal link">🔄</button>
+                                        </form>
+                                        <form method="post" action="{{ url_for('regen_client', client=c.name) }}" onsubmit="return confirm('Regenerate keys for {{ c.name }}?')">
+                                            <button class="btn btn-yellow btn-sm" type="submit" title="Regenerate keys">↻</button>
+                                        </form>
+                                        <form method="post" action="{{ url_for('delete_client', client=c.name) }}" onsubmit="return confirm('Delete {{ c.name }}?')">
+                                            <button class="btn btn-danger btn-sm" type="submit" title="Delete">✕</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- PAGINATION -->
+                {% if total_pages > 1 %}
+                <div class="pagination">
+                    <a class="page-btn {% if page <= 1 %}disabled{% endif %}"
+                       href="/?page={{ page-1 }}{% if active_tag %}&tag={{ active_tag }}{% endif %}{% if search %}&search={{ search }}{% endif %}">← PREV</a>
+                    {% for p in range(1, total_pages+1) %}
+                    <a class="page-btn {% if p == page %}active{% endif %}"
+                       href="/?page={{ p }}{% if active_tag %}&tag={{ active_tag }}{% endif %}{% if search %}&search={{ search }}{% endif %}">{{ p }}</a>
+                    {% endfor %}
+                    <a class="page-btn {% if page >= total_pages %}disabled{% endif %}"
+                       href="/?page={{ page+1 }}{% if active_tag %}&tag={{ active_tag }}{% endif %}{% if search %}&search={{ search }}{% endif %}">NEXT →</a>
+                </div>
+                <div class="page-info" style="text-align:center;margin-top:8px;">
+                    Page {{ page }} of {{ total_pages }} &nbsp;·&nbsp; {{ total_clients }} clients
+                </div>
+                {% endif %}
+
+                {% else %}
+                <div class="empty-state" style="margin-top:12px;">
+                    <div class="empty-icon">◎</div>
+                    <div class="empty-title">NO CLIENTS FOUND</div>
+                    <div class="empty-sub">{% if search or active_tag %}// No clients match your search{% else %}// Create your first client above{% endif %}</div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- ACTIVITY LOG -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">▸ ACTIVITY LOG</span>
+                    <a href="{{ url_for('all_logs') }}" class="chip" style="text-decoration:none;cursor:pointer;" title="View all logs">VIEW ALL →</a>
+                </div>
+                {% if activity_logs %}
+                <div class="log-feed">
+                    {% for log in activity_logs %}
+                    <div class="log-entry">
+                        <div class="log-action">{{ log.action }}</div>
+                        <div class="log-time"><span class="rel-time" data-ts="{{ log.created_at }}">{{ log.created_at }}</span></div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <div class="empty-icon">▸</div>
+                    <div class="empty-title">NO ACTIVITY YET</div>
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+
+        <!-- RIGHT -->
+        <div class="right-panel">
+            {% if config %}
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+                <span class="panel-title">⚙ GENERATED CONFIG</span>
+                <span class="chip chip-green">{{ client }}</span>
+            </div>
+            <div class="config-actions">
+                <button class="btn btn-ghost btn-sm" onclick="copyText('configBlock')">📋 COPY</button>
+                <a href="{{ url_for('download', client=client) }}"><button class="btn btn-ghost btn-sm" type="button">↓ DOWNLOAD</button></a>
+            </div>
+            <pre id="configBlock">{{ config }}</pre>
+            {% if public_key %}
+            <div class="section-head">// PUBLIC KEY</div>
+            <button class="btn btn-ghost btn-sm" onclick="copyText('pubKeyBlock')" style="margin-bottom:8px;">📋 COPY</button>
+            <pre id="pubKeyBlock">{{ public_key }}</pre>
+            {% endif %}
+            {% if client %}
+            <div class="qr-box">
+                <div class="qr-title">📱 MOBILE QR</div>
+                <div class="qr-sub">// Scan with WireGuard app</div>
+                <img class="qr-img" src="{{ url_for('qr_code', client=client) }}" width="190" alt="QR">
+            </div>
+            <div class="section-head">// PORTAL LINK</div>
+            <div class="portal-link-box">{% if new_client_portal_url %}{{ new_client_portal_url }}{% else %}—{% endif %}</div>
+            {% if new_client_portal_url %}
+            <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="copyPortal('{{ new_client_portal_url }}')">🔗 COPY PORTAL LINK</button>
+            {% endif %}
+            {% endif %}
+            {% else %}
+            <div class="ready-state">
+                <div class="ready-icon">⚡</div>
+                <div class="ready-title">READY TO GENERATE</div>
+                <div class="ready-sub">// Config, QR code, and portal link will appear here</div>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+
+<!-- RENAME MODAL -->
+<div class="modal-bg" id="renameModal">
+    <div class="modal">
+        <button class="modal-close" onclick="closeModal('renameModal')">✕</button>
+        <div class="modal-title">✎ RENAME CLIENT</div>
+        <form method="post" id="renameForm">
+            <label class="fl">New Name</label>
+            <div class="input-row" style="margin-bottom:16px;"><span class="i-icon">›</span>
+            <input type="text" name="new_name" id="renameInput" placeholder="new_name" required></div>
+            <button class="btn-generate" type="submit"><div class="fill"></div><span>RENAME →</span></button>
+        </form>
+    </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-bg" id="editModal">
+    <div class="modal">
+        <button class="modal-close" onclick="closeModal('editModal')">✕</button>
+        <div class="modal-title">⚙ EDIT CLIENT</div>
+        <form method="post" id="editForm">
+            <label class="fl">Tags</label>
+            <div class="input-row field-gap"><span class="i-icon">#</span>
+            <input type="text" name="tags" id="editTags" placeholder="mobile, office"></div>
+            <label class="fl">Notes</label>
+            <div class="field-gap"><textarea name="notes" id="editNotes" placeholder="Description..."></textarea></div>
+            <label class="fl">Expiry Date</label>
+            <div class="input-row" style="margin-bottom:14px;"><span class="i-icon">📅</span>
+            <input type="date" name="expires_at" id="editExpiry"></div>
+            <label class="fl">Location</label>
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+                <div class="input-row" style="flex:1;margin-bottom:0;"><span class="i-icon">📍</span>
+                <input type="text" name="location" id="editLocation" placeholder="e.g. Sydney, Australia"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();geocode('edit');}"></div>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="geocode('edit')" id="editGeoBtn" title="Look up coordinates">🔍 LOOKUP</button>
+            </div>
+            <div id="editGeoStatus" style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:8px;min-height:16px;"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px;">
+                <div class="input-row" style="margin-bottom:0;"><span class="i-icon" style="font-size:11px;">LAT</span>
+                <input type="text" name="lat" id="editLat" placeholder="-33.8688" style="padding-left:40px;"></div>
+                <div class="input-row" style="margin-bottom:0;"><span class="i-icon" style="font-size:11px;">LON</span>
+                <input type="text" name="lon" id="editLon" placeholder="151.2093" style="padding-left:40px;"></div>
+            </div>
+            <label class="fl" style="margin-top:6px;">LAN Access Mode</label>
+            <input type="hidden" name="access_mode" id="editAccessMode" value="internet">
+            <div class="access-mode-group" style="margin-bottom:6px;">
+                <button type="button" class="access-btn" id="editBtn_internet" onclick="setAccessMode('edit','internet',this)">INTERNET ONLY</button>
+                <button type="button" class="access-btn" id="editBtn_lan" onclick="setAccessMode('edit','lan',this)">LAN ONLY</button>
+                <button type="button" class="access-btn" id="editBtn_full" onclick="setAccessMode('edit','full',this)">FULL ACCESS</button>
+            </div>
+            <div class="helper" id="editAccessDesc" style="margin-bottom:18px;">// Routes all internet traffic through VPN (0.0.0.0/0)</div>
+            <button class="btn-generate" type="submit"><div class="fill"></div><span>SAVE →</span></button>
+        </form>
+    </div>
+</div>
+
+<!-- CLONE MODAL -->
+<div class="modal-bg" id="cloneModal">
+    <div class="modal">
+        <button class="modal-close" onclick="closeModal('cloneModal')">✕</button>
+        <div class="modal-title">⎘ CLONE CLIENT</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:14px;">// New keys + IP, same tags/notes/expiry</div>
+        <form method="post" id="cloneForm">
+            <label class="fl">New Client Name</label>
+            <div class="input-row" style="margin-bottom:18px;"><span class="i-icon">›</span>
+            <input type="text" name="new_name" id="cloneInput" placeholder="client_copy" required></div>
+            <button class="btn-generate" type="submit"><div class="fill"></div><span>CLONE →</span></button>
+        </form>
+    </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// ── THEME ──
+function toggleTheme(){
+    const b=document.getElementById('mainBody');
+    b.classList.toggle('light');
+    localStorage.setItem('theme',b.classList.contains('light')?'light':'dark');
+}
+
+// ── NOTIF BELL ──
+function toggleNotif(){document.getElementById('notifDrop').classList.toggle('open');}
+document.addEventListener('click',e=>{
+    const bell=document.getElementById('notifBtn');
+    const drop=document.getElementById('notifDrop');
+    if(bell&&drop&&!bell.contains(e.target)&&!drop.contains(e.target))drop.classList.remove('open');
+});
+
+// ── KEYBOARD SHORTCUTS ──
+document.addEventListener('keydown',e=>{
+    const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);
+    if(e.key==='Escape'){
+        document.querySelectorAll('.modal-bg.open').forEach(m=>m.classList.remove('open'));
+        const d=document.getElementById('notifDrop');if(d)d.classList.remove('open');
+    }
+    if(e.key==='n'&&!e.ctrlKey&&!e.metaKey&&!typing){
+        e.preventDefault();
+        const inp=document.getElementById('clientNameInput');
+        if(inp){inp.focus();inp.scrollIntoView({behavior:'smooth',block:'center'});}
+    }
+    if(e.key==='r'&&!e.ctrlKey&&!e.metaKey&&!typing){
+        window.open('/wireguard','_blank');
+    }
+});
+
+// ── TOAST ──
+function showToast(msg,isErr=false){
+    const t=document.getElementById('toast');
+    t.innerText=msg;t.className='toast'+(isErr?' err':'');t.style.display='block';
+    clearTimeout(window._tt);window._tt=setTimeout(()=>{t.style.display='none';},4000);
+}
+
+// ── COPY ──
+function copyText(id){
+    const el=document.getElementById(id);
+    if(!el)return showToast('NOTHING TO COPY',true);
+    navigator.clipboard.writeText(el.innerText).then(()=>showToast('// COPIED ✓')).catch(()=>showToast('COPY FAILED',true));
+}
+function copyIP(ip){
+    navigator.clipboard.writeText(ip).then(()=>showToast('// IP COPIED: '+ip)).catch(()=>showToast('COPY FAILED',true));
+}
+function copyPortal(url){
+    navigator.clipboard.writeText(url).then(()=>showToast('// PORTAL LINK COPIED ✓')).catch(()=>showToast('COPY FAILED',true));
+}
+
+// ── RELATIVE TIME ──
+function relTime(tsStr){
+    const clean=tsStr.replace(' UTC','').replace(' ','T')+'Z';
+    const d=new Date(clean);
+    if(isNaN(d))return tsStr;
+    const secs=Math.floor((Date.now()-d)/1000);
+    if(secs<60)return 'just now';
+    if(secs<3600)return Math.floor(secs/60)+'m ago';
+    if(secs<86400)return Math.floor(secs/3600)+'h ago';
+    if(secs<604800)return Math.floor(secs/86400)+'d ago';
+    return d.toLocaleDateString();
+}
+function updateRelTimes(){
+    document.querySelectorAll('.rel-time[data-ts]').forEach(el=>{
+        el.innerText=relTime(el.dataset.ts);
+        el.title=el.dataset.ts;
+    });
+}
+updateRelTimes();
+setInterval(updateRelTimes,60000);
+
+// ── MODALS (with auto-focus) ──
+function openModal(id,focusId){
+    document.getElementById(id).classList.add('open');
+    if(focusId){setTimeout(()=>{const el=document.getElementById(focusId);if(el){el.focus();if(el.select)el.select();}},80);}
+}
+function openRename(name){
+    document.getElementById('renameForm').action='/rename/'+name;
+    document.getElementById('renameInput').value='';
+    openModal('renameModal','renameInput');
+}
+function openEdit(name,notes,expiry,tags,location,lat,lon,access_mode){
+    document.getElementById('editForm').action='/update/'+name;
+    document.getElementById('editNotes').value=notes||'';
+    document.getElementById('editExpiry').value=expiry||'';
+    document.getElementById('editTags').value=tags||'';
+    document.getElementById('editLocation').value=location||'';
+    document.getElementById('editLat').value=lat||'';
+    document.getElementById('editLon').value=lon||'';
+    const mode=access_mode||'internet';
+    document.getElementById('editAccessMode').value=mode;
+    ['internet','lan','full'].forEach(v=>{
+        const b=document.getElementById('editBtn_'+v);
+        if(b)b.className='access-btn'+(v===mode?' am-active-'+mode:'');
+    });
+    const descs={internet:'// Routes all internet traffic through VPN (0.0.0.0/0)',lan:'// LAN access only — 192.168.88.0/24',full:'// Full access — internet + LAN (0.0.0.0/0 + 192.168.88.0/24)'};
+    const d=document.getElementById('editAccessDesc');if(d)d.innerText=descs[mode]||'';
+    openModal('editModal','editTags');
+}
+function openClone(name){
+    document.getElementById('cloneForm').action='/clone/'+name;
+    document.getElementById('cloneInput').value=name+'_copy';
+    openModal('cloneModal','cloneInput');
+}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.modal-bg').forEach(m=>{
+    m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});
+});
+
+// ── BULK SELECT ──
+function toggleSelectAll(cb){
+    document.querySelectorAll('.row-check').forEach(c=>c.checked=cb.checked);
+    updateBulkBar();
+}
+function updateBulkBar(){
+    const checked=document.querySelectorAll('.row-check:checked');
+    const bar=document.getElementById('bulkBar');
+    const count=document.getElementById('bulkCount');
+    if(checked.length>0){
+        bar.classList.add('visible');
+        count.innerText=checked.length+' selected';
+        const form=document.getElementById('bulkForm');
+        form.querySelectorAll('input[name=selected_clients]').forEach(i=>i.remove());
+        checked.forEach(c=>{
+            const inp=document.createElement('input');
+            inp.type='hidden';inp.name='selected_clients';inp.value=c.dataset.name;
+            form.appendChild(inp);
+        });
+    } else {
+        bar.classList.remove('visible');
+        const sa=document.getElementById('selectAll');if(sa)sa.checked=false;
+    }
+}
+
+// ── LOADER ──
+function showLoader(){
+    const l=document.getElementById('loaderWrap'),b=document.getElementById('generateButton');
+    if(l)l.style.display='block';
+    if(b){b.disabled=true;b.querySelector('span').innerText='GENERATING...';}
+}
+
+// ── RESET ──
+function confirmResetAll(){
+    const a=prompt('Type RESET to wipe everything.');
+    if(a==='RESET')return true;alert('Cancelled.');return false;
+}
+
+// ── VPS STATS ──
+function updateSysStats(){
+    fetch('/api/sys').then(r=>r.json()).then(d=>{
+        const set=(id,v)=>{const e=document.getElementById(id);if(e)e.innerText=v;};
+        const bar=(id,v)=>{const e=document.getElementById(id);if(e)e.style.width=v+'%';};
+        set('cpuVal',d.cpu.toFixed(1)+'%');bar('cpuBar',d.cpu);
+        set('ramVal',d.ram.toFixed(1)+'%');bar('ramBar',d.ram);
+        set('diskVal',d.disk.toFixed(1)+'%');bar('diskBar',d.disk);
+        const h=Math.floor(d.uptime/3600),m=Math.floor((d.uptime%3600)/60);
+        set('uptimeVal','up '+h+'h '+m+'m');
+    }).catch(()=>{});
+}
+function recheckMT(){
+    const el=document.getElementById('mtCheck');
+    if(!el)return;
+    el.innerText='checking...';
+    fetch('/api/mt-health').then(r=>r.json()).then(d=>{
+        el.innerText=d.ok?'connected':'unreachable';
+        el.style.color=d.ok?'var(--green)':'var(--red)';
+    }).catch(()=>{el.innerText='error';});
+}
+setInterval(updateSysStats,10000);
+
+// ── ACCESS MODE SELECTOR ──
+const _accessDescs={
+    internet:'// Routes all internet traffic through VPN (0.0.0.0/0)',
+    lan:'// LAN access only — 192.168.88.0/24',
+    full:'// Full access — internet + LAN (0.0.0.0/0 + 192.168.88.0/24)'
+};
+function setAccessMode(ctx,val,btn){
+    const hdn=document.getElementById(ctx+'AccessMode');
+    const desc=document.getElementById(ctx+'AccessDesc');
+    if(hdn)hdn.value=val;
+    ['internet','lan','full'].forEach(v=>{
+        const b=document.getElementById(ctx+'Btn_'+v);
+        if(b)b.className='access-btn'+(v===val?' am-active-'+val:'');
+    });
+    if(desc)desc.innerText=_accessDescs[val]||'';
+}
+
+// ── GEOCODE (OpenStreetMap Nominatim — no API key required) ──
+function geocode(ctx){
+    // ctx = 'create' or 'edit'
+    const locEl  = document.getElementById(ctx+'Location');
+    const latEl  = document.getElementById(ctx+'Lat');
+    const lonEl  = document.getElementById(ctx+'Lon');
+    const btnEl  = document.getElementById(ctx+'GeoBtn');
+    const statEl = document.getElementById(ctx+'GeoStatus');
+
+    const query = locEl.value.trim();
+    if(!query){ showToast('Enter a location name first', true); return; }
+
+    btnEl.disabled = true;
+    btnEl.innerText = '⏳';
+    statEl.innerText = 'Looking up...';
+    statEl.style.color = 'var(--muted)';
+
+    // Nominatim requires a User-Agent — browser fetch sets one automatically
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`;
+
+    fetch(url, { headers: { 'Accept-Language': 'en' } })
+        .then(r => r.json())
+        .then(results => {
+            if(!results || results.length === 0){
+                statEl.innerText = '✗ Location not found. Try a different name.';
+                statEl.style.color = 'var(--red)';
+                return;
+            }
+            const r = results[0];
+            const lat = parseFloat(r.lat).toFixed(6);
+            const lon = parseFloat(r.lon).toFixed(6);
+
+            latEl.value = lat;
+            lonEl.value = lon;
+
+            // Update location name with the canonical display name if it was vague
+            const displayName = r.display_name.split(',').slice(0,3).join(',').trim();
+            statEl.innerText = `✓ Found: ${displayName} (${lat}, ${lon})`;
+            statEl.style.color = 'var(--green)';
+
+            showToast(`// Location found: ${lat}, ${lon}`);
+        })
+        .catch(e => {
+            statEl.innerText = '✗ Lookup failed. Check your connection.';
+            statEl.style.color = 'var(--red)';
+            showToast('Geocode failed: ' + e, true);
+        })
+        .finally(() => {
+            btnEl.disabled = false;
+            btnEl.innerText = '🔍 LOOKUP';
+        });
+}
+</script>
+</body>
+</html>

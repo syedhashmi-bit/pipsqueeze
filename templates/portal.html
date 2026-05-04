@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VPN Client Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root{
+            --bg:#030508;--surface:#060c13;--panel:rgba(6,14,24,0.93);
+            --border:rgba(0,200,255,0.1);--border-lit:rgba(0,200,255,0.4);
+            --cyan:#00c8ff;--cyan-dim:rgba(0,200,255,0.07);
+            --green:#00ff9d;--green-dim:rgba(0,255,157,0.07);
+            --red:#ff4060;--yellow:#ffc940;
+            --text:#c8e0ee;--muted:#3d6070;--muted-mid:#6a8ea0;
+            --mono:'Share Tech Mono',monospace;--display:'Rajdhani',sans-serif;
+        }
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:var(--display);background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;overflow:hidden;position:relative;}
+        .bg-layer{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+        .grid-overlay{position:absolute;inset:0;background-image:linear-gradient(rgba(0,200,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,0.04) 1px,transparent 1px);background-size:44px 44px;animation:gridMove 20s linear infinite;}
+        @keyframes gridMove{to{background-position:44px 44px;}}
+        .scanlines{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.12) 3px,rgba(0,0,0,0.12) 4px);}
+        .gs{position:absolute;border-radius:50%;filter:blur(140px);}
+        .gs1{width:800px;height:800px;background:#001830;top:-300px;left:-250px;opacity:.45;}
+        .gs2{width:500px;height:500px;background:#001020;bottom:-150px;right:-150px;opacity:.35;}
+        .stream{position:absolute;width:1px;background:linear-gradient(to bottom,transparent,var(--cyan),transparent);animation:streamDrop linear infinite;opacity:0;}
+        @keyframes streamDrop{0%{top:-20%;opacity:0;}5%{opacity:.4;}95%{opacity:.4;}100%{top:120%;opacity:0;}}
+
+        .wrap{position:relative;z-index:10;width:100%;max-width:520px;animation:slideUp .6s cubic-bezier(.22,1,.36,1) both;}
+        @keyframes slideUp{from{opacity:0;transform:translateY(24px);}to{opacity:1;transform:translateY(0);}}
+
+        .card{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:40px 38px;backdrop-filter:blur(20px);box-shadow:0 0 0 1px rgba(0,200,255,0.05),0 50px 100px rgba(0,0,0,0.7);position:relative;overflow:hidden;}
+        .card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.5;animation:topScan 4s ease-in-out infinite;}
+        @keyframes topScan{0%,100%{opacity:.25;}50%{opacity:.8;}}
+
+        .corner{position:absolute;width:16px;height:16px;border-color:var(--cyan);border-style:solid;opacity:.3;}
+        .c-tl{top:10px;left:10px;border-width:1px 0 0 1px;}
+        .c-tr{top:10px;right:10px;border-width:1px 1px 0 0;}
+        .c-bl{bottom:10px;left:10px;border-width:0 0 1px 1px;}
+        .c-br{bottom:10px;right:10px;border-width:0 1px 1px 0;}
+
+        .sys-id{font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--cyan);opacity:.65;display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+        .live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green);animation:blink 1.2s step-end infinite;flex-shrink:0;}
+        @keyframes blink{0%,100%{opacity:1;}50%{opacity:0;}}
+
+        h1{font-size:28px;font-weight:700;letter-spacing:.05em;color:#fff;margin-bottom:6px;text-shadow:0 0 30px rgba(0,200,255,0.2);}
+        .tagline{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.05em;margin-bottom:28px;}
+
+        .info-grid{display:grid;gap:10px;margin-bottom:26px;}
+        .info-row{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-radius:3px;background:rgba(0,200,255,0.03);border:1px solid rgba(0,200,255,0.08);}
+        .info-key{font-family:var(--mono);font-size:11.5px;color:var(--muted-mid);}
+        .info-val{font-family:var(--mono);font-size:12px;color:var(--cyan);font-weight:700;}
+        .info-val-green{color:var(--green);}
+
+        .expires-warn{padding:11px 14px;border-radius:3px;background:rgba(255,201,64,0.06);border:1px solid rgba(255,201,64,0.2);border-left:2px solid var(--yellow);font-family:var(--mono);font-size:12px;color:var(--yellow);margin-bottom:18px;}
+
+        .actions{display:flex;flex-direction:column;gap:12px;}
+
+        .dl-btn{display:flex;align-items:center;justify-content:center;gap:10px;padding:16px;background:transparent;border:1px solid var(--cyan);border-radius:3px;color:var(--cyan);font-family:var(--display);font-size:16px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;cursor:pointer;text-decoration:none;position:relative;overflow:hidden;transition:color .25s,box-shadow .25s;}
+        .dl-btn .fill{position:absolute;inset:0;background:var(--cyan);transform:scaleX(0);transform-origin:left;transition:transform .3s cubic-bezier(.22,1,.36,1);z-index:0;}
+        .dl-btn:hover .fill{transform:scaleX(1);}
+        .dl-btn:hover{color:#000;box-shadow:0 0 28px rgba(0,200,255,0.3);}
+        .dl-btn span{position:relative;z-index:1;}
+
+        .qr-box{padding:22px;text-align:center;border:1px solid rgba(0,255,157,0.18);border-radius:4px;background:rgba(0,255,157,0.03);position:relative;}
+        .qr-box::before{content:'QR CODE';position:absolute;top:-9px;left:14px;background:var(--surface);padding:0 7px;font-family:var(--mono);font-size:10px;color:var(--green);letter-spacing:.15em;}
+        .qr-title{font-size:14px;font-weight:700;color:var(--green);margin-bottom:4px;}
+        .qr-sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:14px;}
+        img.qr-img{background:#fff;padding:10px;border-radius:6px;display:block;margin:auto;box-shadow:0 0 24px rgba(0,255,157,0.12);}
+
+        .footer{margin-top:24px;display:flex;justify-content:space-between;align-items:center;padding-top:18px;border-top:1px solid rgba(0,200,255,0.07);}
+        .footer-left{font-family:var(--mono);font-size:11px;color:var(--muted);}
+        .online-badge{font-family:var(--mono);font-size:11px;color:var(--green);display:flex;align-items:center;gap:6px;}
+        .online-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);}
+    </style>
+</head>
+<body>
+<div class="bg-layer">
+    <div class="grid-overlay"></div><div class="scanlines"></div>
+    <div class="gs gs1"></div><div class="gs gs2"></div>
+</div>
+<script>
+    const bg=document.querySelector('.bg-layer');
+    for(let i=0;i<8;i++){const s=document.createElement('div');s.className='stream';s.style.cssText=`left:${Math.random()*100}%;height:${Math.random()*18+10}%;animation-duration:${Math.random()*8+6}s;animation-delay:${Math.random()*12}s;`;bg.appendChild(s);}
+</script>
+
+<div class="wrap">
+    <div class="card">
+        <div class="corner c-tl"></div><div class="corner c-tr"></div>
+        <div class="corner c-bl"></div><div class="corner c-br"></div>
+
+        <div class="sys-id"><span class="live-dot"></span>WIREGUARD CLIENT PORTAL</div>
+        <h1>{{ client.name }}</h1>
+        <p class="tagline">// YOUR PERSONAL VPN CONFIGURATION</p>
+
+        <div class="info-grid">
+            <div class="info-row">
+                <span class="info-key">CLIENT NAME</span>
+                <span class="info-val">{{ client.name }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-key">VPN IP ADDRESS</span>
+                <span class="info-val">{{ client.ip }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-key">CREATED</span>
+                <span class="info-val">{{ client.created_at }}</span>
+            </div>
+            {% if client.notes %}
+            <div class="info-row">
+                <span class="info-key">NOTES</span>
+                <span class="info-val" style="color:var(--muted-mid);">{{ client.notes }}</span>
+            </div>
+            {% endif %}
+            <div class="info-row">
+                <span class="info-key">STATUS</span>
+                {% if client.disabled %}
+                <span class="info-val" style="color:var(--red);">DISABLED</span>
+                {% else %}
+                <span class="info-val info-val-green">ACTIVE</span>
+                {% endif %}
+            </div>
+            <div class="info-row">
+                <span class="info-key">ACCESS MODE</span>
+                {% if client.access_mode == 'lan' %}
+                <span class="info-val" style="color:var(--yellow);">LAN ONLY (192.168.88.0/24)</span>
+                {% elif client.access_mode == 'full' %}
+                <span class="info-val info-val-green">FULL ACCESS (INTERNET + LAN)</span>
+                {% else %}
+                <span class="info-val">INTERNET ONLY (0.0.0.0/0)</span>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if client.expires_at %}
+        <div class="expires-warn">⏳ &nbsp;This profile expires on {{ client.expires_at }}</div>
+        {% endif %}
+
+        <div class="actions">
+            {% if has_conf %}
+            <a class="dl-btn" href="{{ url_for('portal_download', token=client.portal_token) }}">
+                <div class="fill"></div>
+                <span>↓ DOWNLOAD CONFIG (.conf)</span>
+            </a>
+            {% else %}
+            <div style="text-align:center;font-family:var(--mono);font-size:13px;color:var(--red);padding:14px;border:1px solid rgba(255,64,96,0.2);border-radius:3px;">
+                ⚠ Config file not available
+            </div>
+            {% endif %}
+
+            <div class="qr-box">
+                <div class="qr-title">📱 SCAN WITH WIREGUARD APP</div>
+                <div class="qr-sub">// Open WireGuard → Add tunnel → Scan QR</div>
+                <img class="qr-img" src="{{ url_for('portal_qr', token=client.portal_token) }}" width="200" alt="WireGuard QR Code">
+            </div>
+        </div>
+
+        <div class="footer">
+            <span class="footer-left">MikroTik · WireGuard VPN</span>
+            <span class="online-badge">SECURE PORTAL</span>
+        </div>
+    </div>
+</div>
+</body>
+</html>

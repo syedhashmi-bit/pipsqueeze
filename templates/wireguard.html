@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WireGuard Peers</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <style>
+        :root{
+            --bg:#030508;--surface:#060c13;--panel:rgba(6,14,24,0.93);
+            --border:rgba(0,200,255,0.1);--border-lit:rgba(0,200,255,0.4);
+            --cyan:#00c8ff;--cyan-dim:rgba(0,200,255,0.07);
+            --green:#00ff9d;--green-dim:rgba(0,255,157,0.07);
+            --red:#ff4060;--red-dim:rgba(255,64,96,0.09);
+            --yellow:#ffc940;--yellow-dim:rgba(255,201,64,0.09);
+            --blue:#58a6ff;
+            --text:#c8e0ee;--muted:#3d6070;--muted-mid:#6a8ea0;
+            --mono:'Share Tech Mono',monospace;--display:'Rajdhani',sans-serif;
+        }
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:var(--display);background:var(--bg);color:var(--text);min-height:100vh;padding:28px 32px;overflow-x:hidden;}
+        .bg-layer{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+        .grid-overlay{position:absolute;inset:0;background-image:linear-gradient(rgba(0,200,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,0.04) 1px,transparent 1px);background-size:44px 44px;animation:gridMove 20s linear infinite;}
+        @keyframes gridMove{to{background-position:44px 44px;}}
+        .scanlines{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.12) 3px,rgba(0,0,0,0.12) 4px);}
+        .gs{position:absolute;border-radius:50%;filter:blur(140px);}
+        .gs1{width:900px;height:900px;background:#001830;top:-350px;left:-300px;opacity:0.5;}
+        .gs2{width:600px;height:600px;background:#001020;bottom:-200px;right:-200px;opacity:0.4;}
+        .stream{position:absolute;width:1px;background:linear-gradient(to bottom,transparent,var(--cyan),transparent);animation:streamDrop linear infinite;opacity:0;}
+        @keyframes streamDrop{0%{top:-20%;opacity:0;}5%{opacity:0.4;}95%{opacity:0.4;}100%{top:120%;opacity:0;}}
+        .page{max-width:1400px;margin:auto;position:relative;z-index:1;}
+
+        /* TOPBAR */
+        .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:26px;padding-bottom:20px;border-bottom:1px solid rgba(0,200,255,0.08);animation:fadeDown .5s ease both;}
+        @keyframes fadeDown{from{opacity:0;transform:translateY(-14px);}to{opacity:1;transform:translateY(0);}}
+        h1{font-size:30px;font-weight:700;letter-spacing:.05em;color:#fff;text-shadow:0 0 40px rgba(0,200,255,0.2);margin-bottom:5px;}
+        .page-sub{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.05em;}
+        .topbar-right{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-top:4px;}
+        .auto-badge{display:flex;align-items:center;gap:7px;padding:8px 13px;border:1px solid rgba(0,200,255,0.15);border-radius:3px;background:var(--cyan-dim);font-family:var(--mono);font-size:11px;color:var(--cyan);letter-spacing:.08em;}
+        .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green);animation:blink 1.2s step-end infinite;flex-shrink:0;}
+        @keyframes blink{0%,100%{opacity:1;}50%{opacity:0;}}
+
+        /* BUTTONS */
+        .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:3px;font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.06em;cursor:pointer;text-decoration:none;transition:all .2s;white-space:nowrap;border:none;}
+        .btn-ghost{background:transparent;border:1px solid var(--border-lit);color:var(--cyan);}
+        .btn-ghost:hover{background:var(--cyan-dim);box-shadow:0 0 20px rgba(0,200,255,0.15);}
+        .btn-danger{background:var(--red-dim);border:1px solid rgba(255,64,96,0.3);color:var(--red);}
+        .btn-danger:hover{background:rgba(255,64,96,0.14);}
+        .btn-green{background:var(--green-dim);border:1px solid rgba(0,255,157,0.3);color:var(--green);}
+        .btn-sm{padding:6px 12px;font-size:11.5px;letter-spacing:.06em;}
+
+        /* INTERFACE TABS */
+        .iface-bar{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap;animation:fadeUp .5s .05s ease both;}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+        .iface-label{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.1em;}
+        .iface-btn{padding:6px 14px;border-radius:2px;font-family:var(--mono);font-size:11.5px;cursor:pointer;text-decoration:none;border:1px solid rgba(0,200,255,0.2);color:var(--muted-mid);background:transparent;transition:all .2s;}
+        .iface-btn:hover,.iface-btn.active{border-color:var(--cyan);color:var(--cyan);background:var(--cyan-dim);}
+
+        /* STAT STRIP */
+        .stat-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;animation:fadeUp .5s .06s ease both;}
+        .stat-card{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:16px 18px;position:relative;overflow:hidden;transition:border-color .25s,transform .2s;cursor:default;}
+        .stat-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;transform:scaleX(0);transition:transform .3s;}
+        .s-total::after{background:var(--cyan);}
+        .s-online::after{background:var(--green);}
+        .s-enabled::after{background:var(--blue);}
+        .s-disabled::after{background:var(--muted-mid);}
+        .stat-card:hover{border-color:rgba(0,200,255,0.25);transform:translateY(-2px);}
+        .stat-card:hover::after{transform:scaleX(1);}
+        .stat-label{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
+        .stat-val{font-size:30px;font-weight:700;line-height:1;letter-spacing:-.02em;}
+        .s-total .stat-val{color:var(--cyan);text-shadow:0 0 25px rgba(0,200,255,0.35);}
+        .s-online .stat-val{color:var(--green);text-shadow:0 0 25px rgba(0,255,157,0.35);}
+        .s-enabled .stat-val{color:var(--blue);text-shadow:0 0 25px rgba(88,166,255,0.35);}
+        .s-disabled .stat-val{color:var(--muted-mid);}
+
+        /* MAIN CARD */
+        .main-card{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:22px;position:relative;overflow:hidden;animation:fadeUp .5s .1s ease both;}
+        .main-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.35;}
+
+        /* TOOLBAR */
+        .toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
+        .toolbar-left,.toolbar-right{display:flex;gap:9px;flex-wrap:wrap;align-items:center;}
+        .input-shell{position:relative;display:flex;align-items:center;}
+        .i-icon{position:absolute;left:11px;font-size:13px;color:var(--cyan);opacity:.3;pointer-events:none;}
+        input,select{padding:10px 11px 10px 32px;background:rgba(0,200,255,0.04);border:1px solid rgba(0,200,255,0.13);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:13px;letter-spacing:.04em;outline:none;transition:all .2s;}
+        select{padding-left:11px;min-width:150px;cursor:pointer;}
+        input{min-width:190px;}
+        input:focus,select:focus{border-color:var(--cyan);background:rgba(0,200,255,0.07);box-shadow:0 0 0 3px rgba(0,200,255,0.08);}
+        input::placeholder{color:rgba(61,96,112,0.6);}
+        select option{background:#060c13;}
+
+        /* TABLE */
+        .table-shell{border:1px solid rgba(0,200,255,0.08);border-radius:4px;overflow-x:auto;}
+        .table-shell::-webkit-scrollbar{height:4px;}
+        .table-shell::-webkit-scrollbar-thumb{background:rgba(0,200,255,0.2);border-radius:2px;}
+        table{width:100%;border-collapse:collapse;min-width:1100px;}
+        th{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;padding:11px 13px;text-align:left;border-bottom:1px solid rgba(0,200,255,0.08);background:rgba(0,200,255,0.025);cursor:pointer;user-select:none;white-space:nowrap;transition:color .2s;}
+        th:hover{color:var(--cyan);}
+        th .arr{opacity:.3;font-size:9px;margin-left:3px;}
+        td{padding:13px;font-size:13px;border-bottom:1px solid rgba(0,200,255,0.05);vertical-align:middle;}
+        tr:last-child td{border-bottom:none;}
+        tr:hover td{background:rgba(0,200,255,0.025);}
+        @keyframes rowFlash{0%{background:rgba(0,200,255,0.1);}100%{background:transparent;}}
+        tr.updated td{animation:rowFlash .6s ease;}
+        .peer-name{font-family:var(--display);font-weight:700;font-size:15px;color:#fff;}
+        .peer-id{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:2px;}
+        .key-cell{font-family:var(--mono);font-size:12px;color:#5a8aaa;cursor:pointer;transition:color .15s;}
+        .key-cell:hover{color:var(--cyan);}
+        .addr-cell{font-family:var(--mono);font-size:13px;color:var(--cyan);}
+        .hs-cell{font-family:var(--mono);font-size:11.5px;color:var(--muted-mid);}
+
+        /* PILLS */
+        .pill{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:2px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;}
+        .pill::before{content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+        .pill-online{background:rgba(0,255,157,0.1);color:var(--green);border:1px solid rgba(0,255,157,0.2);}
+        .pill-online::before{background:var(--green);box-shadow:0 0 5px var(--green);animation:blink 1.2s step-end infinite;}
+        .pill-offline{background:rgba(61,96,112,0.14);color:#5a7a8a;border:1px solid rgba(61,96,112,0.2);}
+        .pill-offline::before{background:#5a7a8a;}
+        .pill-unknown{background:var(--yellow-dim);color:var(--yellow);border:1px solid rgba(255,201,64,0.2);}
+        .pill-unknown::before{background:var(--yellow);}
+        .pill-enabled{background:rgba(0,200,255,0.08);color:var(--cyan);border:1px solid rgba(0,200,255,0.18);}
+        .pill-enabled::before{background:var(--cyan);box-shadow:0 0 4px var(--cyan);}
+        .pill-disabled{background:var(--red-dim);color:#ff8090;border:1px solid rgba(255,64,96,0.18);}
+        .pill-disabled::before{background:#ff8090;}
+
+        /* TRAFFIC */
+        .traffic-cell{font-family:var(--mono);font-size:12px;line-height:2;}
+        .t-rx{color:var(--green);}
+        .t-tx{color:var(--blue);}
+
+        /* SPARKLINE */
+        .spark-wrap{width:80px;height:28px;display:inline-block;}
+
+        /* UPTIME BADGE */
+        .uptime-badge{font-family:var(--mono);font-size:11px;color:var(--green);}
+        .uptime-na{color:var(--muted);}
+
+        /* ACTIONS */
+        .action-col{display:flex;gap:7px;flex-wrap:wrap;}
+        .action-col form{margin:0;}
+
+        /* EXPAND ROW */
+        .expand-row{display:none;}
+        .expand-row.open{display:table-row;}
+        .expand-cell{padding:0 !important;border:none !important;}
+        .expand-inner{padding:16px 20px;background:rgba(0,0,0,0.3);border-bottom:1px solid rgba(0,200,255,0.08);}
+        .expand-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+        .expand-section-title{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--cyan);opacity:.6;text-transform:uppercase;margin-bottom:10px;}
+        .history-list{max-height:140px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;}
+        .history-list::-webkit-scrollbar{width:3px;}
+        .history-list::-webkit-scrollbar-thumb{background:rgba(0,200,255,0.2);border-radius:2px;}
+        .ev-entry{font-family:var(--mono);font-size:11.5px;padding:7px 10px;border-radius:3px;border-left:2px solid;}
+        .ev-connected{border-left-color:var(--green);color:var(--green);background:rgba(0,255,157,0.04);}
+        .ev-disconnected{border-left-color:var(--red);color:#ff8090;background:rgba(255,64,96,0.04);}
+        .ev-time{color:var(--muted);font-size:10px;display:block;margin-top:2px;}
+        .chart-wrap{position:relative;height:100px;}
+
+        /* TABLE FOOTER */
+        .table-footer{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid rgba(0,200,255,0.07);}
+        .tfoot-txt{font-family:var(--mono);font-size:11px;color:var(--muted);}
+
+        /* TOAST */
+        .toast{position:fixed;bottom:22px;right:22px;padding:12px 17px;border-radius:4px;font-family:var(--mono);font-size:12.5px;display:none;z-index:9999;backdrop-filter:blur(12px);border-left:2px solid var(--cyan);background:rgba(0,14,28,0.95);color:var(--cyan);box-shadow:0 16px 40px rgba(0,0,0,0.5);letter-spacing:.04em;max-width:320px;}
+        .toast.err{border-left-color:var(--red);color:#ff8090;}
+
+        @media(max-width:900px){body{padding:18px;}.topbar{flex-direction:column;}.topbar-right{justify-content:flex-start;}.stat-strip{grid-template-columns:repeat(2,1fr);}input,select{width:100%;}.toolbar{flex-direction:column;align-items:flex-start;}}
+    </style>
+</head>
+<body>
+<div class="bg-layer">
+    <div class="grid-overlay"></div><div class="scanlines"></div>
+    <div class="gs gs1"></div><div class="gs gs2"></div>
+</div>
+<script>
+    const bg=document.querySelector('.bg-layer');
+    for(let i=0;i<8;i++){const s=document.createElement('div');s.className='stream';s.style.cssText=`left:${Math.random()*100}%;height:${Math.random()*18+10}%;animation-duration:${Math.random()*8+6}s;animation-delay:${Math.random()*12}s;`;bg.appendChild(s);}
+</script>
+
+<div class="page">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+        <div>
+            <h1>WIREGUARD PEERS</h1>
+            <p class="page-sub">// LIVE STATUS · TRAFFIC · UPTIME · HISTORY</p>
+        </div>
+        <div class="topbar-right">
+            <div class="auto-badge"><span class="live-dot"></span><span id="autoLabel">AUTO-REFRESH 5s</span></div>
+            <a href="{{ url_for('home') }}"><button class="btn btn-ghost" type="button">← DASHBOARD</button></a>
+            <button class="btn btn-ghost" type="button" onclick="loadPeers(true)">↺ REFRESH</button>
+        </div>
+    </div>
+
+    <!-- INTERFACE TABS -->
+    {% if interfaces and interfaces|length > 1 %}
+    <div class="iface-bar">
+        <span class="iface-label">// INTERFACE:</span>
+        {% for iface in interfaces %}
+        <a class="iface-btn {% if iface == selected_interface %}active{% endif %}"
+           href="{{ url_for('wireguard') }}?interface={{ iface }}">{{ iface }}</a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- STAT STRIP -->
+    <div class="stat-strip">
+        <div class="stat-card s-total"><div class="stat-label">// TOTAL PEERS</div><div class="stat-val" id="statTotal">{{ peers|length }}</div></div>
+        <div class="stat-card s-online"><div class="stat-label">// ONLINE</div><div class="stat-val" id="statOnline">0</div></div>
+        <div class="stat-card s-enabled"><div class="stat-label">// ENABLED</div><div class="stat-val" id="statEnabled">0</div></div>
+        <div class="stat-card s-disabled"><div class="stat-label">// DISABLED</div><div class="stat-val" id="statDisabled">0</div></div>
+    </div>
+
+    <!-- MAIN CARD -->
+    <div class="main-card">
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <div class="input-shell">
+                    <span class="i-icon">⌕</span>
+                    <input id="searchBox" type="search" placeholder="Search name, IP, key..." oninput="filterTable()">
+                </div>
+                <select id="statusFilter" onchange="filterTable()">
+                    <option value="all">ALL PEERS</option>
+                    <option value="online">ONLINE ONLY</option>
+                    <option value="offline">OFFLINE ONLY</option>
+                    <option value="enabled">ENABLED ONLY</option>
+                    <option value="disabled">DISABLED ONLY</option>
+                </select>
+            </div>
+            <div class="toolbar-right">
+                <button class="btn btn-ghost btn-sm" onclick="copyVisiblePeers()">📋 COPY VISIBLE</button>
+            </div>
+        </div>
+
+        <div class="table-shell">
+            <table>
+                <thead>
+                    <tr>
+                        <th onclick="sortTable(0)">Name <span class="arr">↕</span></th>
+                        <th>Key</th>
+                        <th onclick="sortTable(2)">Address <span class="arr">↕</span></th>
+                        <th onclick="sortTable(3)">Status <span class="arr">↕</span></th>
+                        <th onclick="sortTable(4)">Connection <span class="arr">↕</span></th>
+                        <th>Last Handshake</th>
+                        <th>Traffic RX/TX</th>
+                        <th>Sparkline</th>
+                        <th>Uptime</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="peerTable">
+                    {% for peer in peers %}
+                    {% set pid = peer.get('peer_id','') %}
+                    <tr data-pid="{{ pid }}" class="peer-row" onclick="toggleExpand('exp-{{ loop.index }}',event)">
+                        <td>
+                            <div class="peer-name">{{ peer.get("comment") or "No name" }}</div>
+                            <div class="peer-id">{{ pid }}</div>
+                        </td>
+                        <td class="key-cell" title="{{ peer.get('public-key','') }}"
+                            data-key="{{ peer.get('public-key','') }}"
+                            onclick="copyRaw(event,this.dataset.key)">
+                            {{ peer.get("public-key","")[:16] }}…
+                        </td>
+                        <td class="addr-cell">{{ peer.get("allowed-address","") }}</td>
+                        <td data-state="{% if peer.get('disabled')=='true' %}disabled{% else %}enabled{% endif %}">
+                            {% if peer.get("disabled")=="true" %}<span class="pill pill-disabled">DISABLED</span>
+                            {% else %}<span class="pill pill-enabled">ENABLED</span>{% endif %}
+                        </td>
+                        <td data-state="{{ peer.get('status','Offline')|lower }}">
+                            {% if peer.get("status")=="Online" %}<span class="pill pill-online">ONLINE</span>
+                            {% elif peer.get("status")=="Unknown" %}<span class="pill pill-unknown">UNKNOWN</span>
+                            {% else %}<span class="pill pill-offline">OFFLINE</span>{% endif %}
+                        </td>
+                        <td class="hs-cell">{{ peer.get("last_handshake","Never") }}</td>
+                        <td class="traffic-cell">
+                            <div class="t-rx">↓ {{ peer.get("rx",0)|int|filesizeformat }}</div>
+                            <div class="t-tx">↑ {{ peer.get("tx",0)|int|filesizeformat }}</div>
+                        </td>
+                        <td>
+                            <canvas class="spark-wrap" id="spark-{{ loop.index }}"></canvas>
+                        </td>
+                        <td>
+                            {% if peer.get("status")=="Online" %}
+                            <span class="uptime-badge" data-hs="{{ peer.get('handshake_seconds',-1) }}" id="uptime-{{ loop.index }}">calculating...</span>
+                            {% else %}
+                            <span class="uptime-na">—</span>
+                            {% endif %}
+                        </td>
+                        <td onclick="event.stopPropagation()">
+                            <div class="action-col">
+                                {% if peer.get("disabled")=="true" %}
+                                <form method="POST" action="{{ url_for('enable_peer', peer_id=pid) }}">
+                                    <button class="btn btn-green btn-sm" type="submit">ENABLE</button>
+                                </form>
+                                {% else %}
+                                <form method="POST" action="{{ url_for('disable_peer', peer_id=pid) }}">
+                                    <button class="btn btn-danger btn-sm" type="submit">DISABLE</button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    <!-- EXPAND ROW -->
+                    <tr class="expand-row" id="exp-{{ loop.index }}">
+                        <td class="expand-cell" colspan="10">
+                            <div class="expand-inner">
+                                <div class="expand-grid">
+                                    <div>
+                                        <div class="expand-section-title">// ONLINE/OFFLINE HISTORY</div>
+                                        <div class="history-list">
+                                            {% set events = peer.get("events",[]) %}
+                                            {% if events %}
+                                                {% for ev in events %}
+                                                <div class="ev-entry ev-{{ ev.event }}">
+                                                    {{ ev.event|upper }}
+                                                    <span class="ev-time">{{ ev.time }}</span>
+                                                </div>
+                                                {% endfor %}
+                                            {% else %}
+                                            <div style="font-family:var(--mono);font-size:12px;color:var(--muted);">// No history yet</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="expand-section-title">// TRAFFIC HISTORY (LAST HOUR)</div>
+                                        <div class="chart-wrap">
+                                            <canvas id="chart-{{ loop.index }}"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="table-footer">
+            <span class="tfoot-txt" id="visibleCount"></span>
+            <span class="tfoot-txt" id="lastRefreshed"></span>
+        </div>
+    </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// ── CHART DATA FROM SERVER ──
+const serverPeerData = {
+    {% for peer in peers %}
+    "{{ loop.index }}": {
+        rxHistory: {{ peer.rx_history | tojson }},
+        txHistory: {{ peer.tx_history | tojson }},
+        hsSecs: {{ peer.get('handshake_seconds', -1) }}
+    },
+    {% endfor %}
+};
+
+// ── UTILS ──
+function fmtBytes(b){
+    b=parseInt(b||0);if(!b)return'0 B';
+    const u=['B','KB','MB','GB','TB'];let i=0;
+    while(b>=1024&&i<u.length-1){b/=1024;i++;}
+    return b.toFixed(i===0?0:2)+' '+u[i];
+}
+function shortKey(k){return k?k.substring(0,16)+'…':'—';}
+function showToast(msg,isErr=false){
+    const t=document.getElementById('toast');
+    t.innerText=msg;t.className='toast'+(isErr?' err':'');t.style.display='block';
+    clearTimeout(window._tt);window._tt=setTimeout(()=>{t.style.display='none';},3200);
+}
+function copyRaw(e,key){
+    e.stopPropagation();
+    if(!key)return;
+    navigator.clipboard.writeText(key).then(()=>showToast('// PUBLIC KEY COPIED ✓')).catch(()=>showToast('COPY FAILED',true));
+}
+
+// ── SPARKLINES ──
+const sparkCharts={};
+function drawSparkline(idx,rxArr,txArr){
+    const canvas=document.getElementById(`spark-${idx}`);
+    if(!canvas)return;
+    const labels=rxArr.map((_,i)=>i);
+    if(sparkCharts[idx]){sparkCharts[idx].destroy();}
+    sparkCharts[idx]=new Chart(canvas,{
+        type:'line',
+        data:{
+            labels,
+            datasets:[
+                {data:rxArr,borderColor:'#00ff9d',borderWidth:1.5,pointRadius:0,fill:false,tension:0.4},
+                {data:txArr,borderColor:'#58a6ff',borderWidth:1.5,pointRadius:0,fill:false,tension:0.4}
+            ]
+        },
+        options:{animation:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{display:false},y:{display:false}},responsive:true,maintainAspectRatio:false}
+    });
+}
+
+// ── EXPANDED TRAFFIC CHARTS ──
+const expandCharts={};
+function drawExpandChart(idx,rxArr,txArr){
+    const canvas=document.getElementById(`chart-${idx}`);
+    if(!canvas)return;
+    const labels=rxArr.map((_,i)=>`-${rxArr.length-i}m`);
+    if(expandCharts[idx]){expandCharts[idx].destroy();}
+    expandCharts[idx]=new Chart(canvas,{
+        type:'line',
+        data:{
+            labels,
+            datasets:[
+                {label:'RX',data:rxArr,borderColor:'#00ff9d',backgroundColor:'rgba(0,255,157,0.07)',borderWidth:2,pointRadius:0,fill:true,tension:0.4},
+                {label:'TX',data:txArr,borderColor:'#58a6ff',backgroundColor:'rgba(88,166,255,0.07)',borderWidth:2,pointRadius:0,fill:true,tension:0.4}
+            ]
+        },
+        options:{
+            animation:false,
+            plugins:{legend:{display:true,labels:{color:'#6a8ea0',font:{family:'Share Tech Mono',size:11},boxWidth:12}}},
+            scales:{
+                x:{ticks:{color:'#3d6070',font:{family:'Share Tech Mono',size:10}},grid:{color:'rgba(0,200,255,0.05)'}},
+                y:{ticks:{color:'#3d6070',font:{family:'Share Tech Mono',size:10},callback:v=>fmtBytes(v)},grid:{color:'rgba(0,200,255,0.05)'}}
+            },
+            responsive:true,maintainAspectRatio:false
+        }
+    });
+}
+
+// ── UPTIME DISPLAY ──
+function fmtUptime(secs){
+    if(secs<0)return'—';
+    if(secs<60)return secs+'s';
+    if(secs<3600)return Math.floor(secs/60)+'m '+(secs%60)+'s';
+    const h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60);
+    return h+'h '+m+'m';
+}
+
+function updateUptimes(){
+    document.querySelectorAll('[id^=uptime-]').forEach(el=>{
+        const hs=parseInt(el.dataset.hs||'-1');
+        if(hs<0){el.innerText='—';return;}
+        el.innerText=fmtUptime(hs);
+        el.dataset.hs=hs+5; // increment by poll interval estimate
+    });
+}
+
+// ── INIT CHARTS FROM SERVER DATA ──
+Object.entries(serverPeerData).forEach(([idx,d])=>{
+    if(d.rxHistory.length)drawSparkline(idx,d.rxHistory,d.txHistory);
+    document.querySelectorAll(`#uptime-${idx}`).forEach(el=>{el.dataset.hs=d.hsSecs;});
+});
+updateUptimes();
+setInterval(updateUptimes,5000);
+
+// ── EXPAND ROWS ──
+function toggleExpand(id,e){
+    if(e&&e.target.closest('button'))return;
+    const row=document.getElementById(id);
+    if(!row)return;
+    const isOpen=row.classList.contains('open');
+    document.querySelectorAll('.expand-row.open').forEach(r=>{if(r.id!==id)r.classList.remove('open');});
+    row.classList.toggle('open',!isOpen);
+    if(!isOpen){
+        // Draw expand chart
+        const idx=id.replace('exp-','');
+        const d=serverPeerData[idx];
+        if(d&&d.rxHistory.length)drawExpandChart(idx,d.rxHistory,d.txHistory);
+    }
+}
+
+// ── PILLS ──
+function connPill(peer){
+    if(peer.status==='Online')return'<span class="pill pill-online">ONLINE</span>';
+    if(peer.status==='Unknown')return'<span class="pill pill-unknown">UNKNOWN</span>';
+    return'<span class="pill pill-offline">OFFLINE</span>';
+}
+function enPill(dis){return dis?'<span class="pill pill-disabled">DISABLED</span>':'<span class="pill pill-enabled">ENABLED</span>';}
+
+// ── LOAD PEERS (live refresh) ──
+function loadPeers(manual=false){
+    const iface=new URLSearchParams(location.search).get('interface')||'';
+    const url=iface?`/peers?interface=${iface}`:'/peers';
+    fetch(url).then(r=>r.json()).then(peers=>{
+        const tbody=document.getElementById('peerTable');
+        let total=peers.length,online=0,enabled=0,disabled=0;
+
+        peers.forEach((peer,i)=>{
+            const idx=i+1;
+            const dis=peer.disabled==='true';
+            const on=peer.status==='Online';
+            if(on)online++;if(dis)disabled++;else enabled++;
+
+            const action=dis
+                ?`<form method="POST" action="/wireguard/enable/${peer.peer_id}"><button class="btn btn-green btn-sm" type="submit">ENABLE</button></form>`
+                :`<form method="POST" action="/wireguard/disable/${peer.peer_id}"><button class="btn btn-danger btn-sm" type="submit">DISABLE</button></form>`;
+
+            const existRow=tbody.querySelector(`tr[data-pid="${peer.peer_id}"]`);
+            if(existRow){
+                // Update cells in place
+                const cells=existRow.querySelectorAll('td');
+                if(cells[3])cells[3].dataset.state=dis?'disabled':'enabled';
+                if(cells[3])cells[3].innerHTML=enPill(dis);
+                if(cells[4])cells[4].dataset.state=(peer.status||'offline').toLowerCase();
+                if(cells[4])cells[4].innerHTML=connPill(peer);
+                if(cells[5])cells[5].innerHTML=peer.last_handshake||'Never';
+                if(cells[6])cells[6].innerHTML=`<div class="t-rx">↓ ${fmtBytes(peer.rx)}</div><div class="t-tx">↑ ${fmtBytes(peer.tx)}</div>`;
+                if(cells[9])cells[9].innerHTML=`<div class="action-col">${action}</div>`;
+            }
+        });
+
+        document.getElementById('statTotal').innerText=total;
+        document.getElementById('statOnline').innerText=online;
+        document.getElementById('statEnabled').innerText=enabled;
+        document.getElementById('statDisabled').innerText=disabled;
+        document.getElementById('lastRefreshed').innerText='LAST SYNC: '+new Date().toLocaleTimeString();
+        filterTable();updateCount();
+        if(manual)showToast('// PEERS REFRESHED ✓');
+    }).catch(e=>{console.error(e);showToast('COULD NOT REACH /peers',true);});
+}
+
+// ── FILTER ──
+function filterTable(){
+    const q=(document.getElementById('searchBox').value||'').toLowerCase();
+    const f=document.getElementById('statusFilter').value;
+    let lastWasPeer=null;
+    document.querySelectorAll('#peerTable tr').forEach(row=>{
+        if(row.classList.contains('expand-row')){
+            if(lastWasPeer!==null)row.style.display=lastWasPeer?'':'none';
+            return;
+        }
+        const text=row.innerText.toLowerCase();
+        const en=row.children[3]?.dataset.state||'';
+        const co=row.children[4]?.dataset.state||'';
+        let ok=text.includes(q);
+        if(f==='online')ok=ok&&co==='online';
+        if(f==='offline')ok=ok&&co==='offline';
+        if(f==='enabled')ok=ok&&en==='enabled';
+        if(f==='disabled')ok=ok&&en==='disabled';
+        row.style.display=ok?'':'none';
+        lastWasPeer=ok;
+    });
+    updateCount();
+}
+
+function updateCount(){
+    const rows=document.querySelectorAll('#peerTable tr.peer-row');
+    let vis=0;rows.forEach(r=>{if(r.style.display!=='none')vis++;});
+    const el=document.getElementById('visibleCount');
+    if(el)el.innerText=`SHOWING ${vis} / ${rows.length} PEERS`;
+}
+
+// ── SORT ──
+const sortDir={};
+function sortTable(col){
+    const tbody=document.getElementById('peerTable');
+    sortDir[col]=!sortDir[col];
+
+    // Build pairs: [peerRow, expandRow] so they stay together
+    const pairs=[];
+    const allRows=Array.from(tbody.querySelectorAll('tr'));
+    for(let i=0;i<allRows.length;i++){
+        const row=allRows[i];
+        if(row.classList.contains('peer-row')){
+            const next=allRows[i+1];
+            const exp=(next&&next.classList.contains('expand-row'))?next:null;
+            pairs.push([row,exp]);
+        }
+    }
+
+    pairs.sort(([a],[b])=>{
+        const at=(a.children[col]?.innerText||'').trim().toLowerCase();
+        const bt=(b.children[col]?.innerText||'').trim().toLowerCase();
+        return sortDir[col]?at.localeCompare(bt):bt.localeCompare(at);
+    });
+
+    tbody.innerHTML='';
+    pairs.forEach(([peer,exp])=>{
+        tbody.appendChild(peer);
+        if(exp)tbody.appendChild(exp);
+    });
+    filterTable();
+}
+
+// ── COPY VISIBLE ──
+function copyVisiblePeers(){
+    let out='';
+    document.querySelectorAll('#peerTable tr.peer-row').forEach(row=>{
+        if(row.style.display==='none')return;
+        const c=row.querySelectorAll('td');
+        if(c.length<8)return;
+        const name=c[0].innerText.trim().split('\n')[0];
+        const addr=c[2].innerText.trim();
+        const conn=c[4].innerText.trim();
+        const traf=c[6].innerText.trim().replace(/\n/g,' ');
+        out+=`[${name}] ADDR:${addr} | STATUS:${conn} | ${traf}\n`;
+    });
+    if(!out){showToast('NO VISIBLE PEERS',true);return;}
+    navigator.clipboard.writeText(out).then(()=>showToast('// VISIBLE PEERS COPIED ✓'));
+}
+
+// ── INIT ──
+(function init(){
+    const rows=document.querySelectorAll('#peerTable tr.peer-row');
+    let total=rows.length,online=0,enabled=0,disabled=0;
+    rows.forEach(row=>{
+        const en=row.children[3]?.dataset.state||'';
+        const co=row.children[4]?.dataset.state||'';
+        if(co==='online')online++;
+        if(en==='disabled')disabled++;else enabled++;
+    });
+    document.getElementById('statTotal').innerText=total;
+    document.getElementById('statOnline').innerText=online;
+    document.getElementById('statEnabled').innerText=enabled;
+    document.getElementById('statDisabled').innerText=disabled;
+    updateCount();
+})();
+
+setInterval(()=>loadPeers(false),5000);
+</script>
+</body>
+</html>

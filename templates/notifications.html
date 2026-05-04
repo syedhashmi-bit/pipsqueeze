@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notification Settings</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root{
+            --bg:#030508;--surface:#060c13;--panel:rgba(6,14,24,0.93);
+            --border:rgba(0,200,255,0.1);--border-lit:rgba(0,200,255,0.4);
+            --cyan:#00c8ff;--cyan-dim:rgba(0,200,255,0.07);
+            --green:#00ff9d;--green-dim:rgba(0,255,157,0.07);
+            --red:#ff4060;--red-dim:rgba(255,64,96,0.09);
+            --yellow:#ffc940;--yellow-dim:rgba(255,201,64,0.09);
+            --purple:#a78bfa;--purple-dim:rgba(167,139,250,0.09);
+            --text:#c8e0ee;--muted:#3d6070;--muted-mid:#6a8ea0;
+            --mono:'Share Tech Mono',monospace;--display:'Rajdhani',sans-serif;
+        }
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:var(--display);background:var(--bg);color:var(--text);min-height:100vh;padding:28px 32px;overflow-x:hidden;}
+
+        /* BG */
+        .bg-layer{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+        .grid-overlay{position:absolute;inset:0;background-image:linear-gradient(rgba(0,200,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,0.04) 1px,transparent 1px);background-size:44px 44px;animation:gridMove 20s linear infinite;}
+        @keyframes gridMove{to{background-position:44px 44px;}}
+        .scanlines{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.12) 3px,rgba(0,0,0,0.12) 4px);}
+        .gs{position:absolute;border-radius:50%;filter:blur(140px);}
+        .gs1{width:800px;height:800px;background:#001830;top:-300px;left:-250px;opacity:.45;}
+        .gs2{width:500px;height:500px;background:#001020;bottom:-150px;right:-150px;opacity:.35;}
+
+        .page{max-width:900px;margin:auto;position:relative;z-index:1;}
+
+        /* TOPBAR */
+        .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;padding-bottom:18px;border-bottom:1px solid var(--border);animation:fadeDown .5s ease both;}
+        @keyframes fadeDown{from{opacity:0;transform:translateY(-12px);}to{opacity:1;transform:translateY(0);}}
+        .brand-row{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
+        .brand-icon{width:40px;height:40px;border-radius:6px;background:var(--cyan-dim);border:1px solid rgba(0,200,255,0.2);display:flex;align-items:center;justify-content:center;font-size:18px;}
+        h1{font-size:26px;font-weight:700;letter-spacing:.05em;color:#fff;}
+        .page-sub{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:4px;}
+
+        /* BUTTONS */
+        .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:3px;font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.06em;cursor:pointer;text-decoration:none;transition:all .2s;white-space:nowrap;border:none;}
+        .btn-ghost{background:transparent;border:1px solid var(--border-lit);color:var(--cyan);}
+        .btn-ghost:hover{background:var(--cyan-dim);box-shadow:0 0 18px rgba(0,200,255,0.12);}
+        .btn-save{background:transparent;border:1px solid var(--cyan);color:var(--cyan);font-family:var(--display);font-size:15px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;cursor:pointer;padding:14px 30px;border-radius:3px;position:relative;overflow:hidden;transition:color .25s,box-shadow .25s;width:100%;}
+        .btn-save .fill{position:absolute;inset:0;background:var(--cyan);transform:scaleX(0);transform-origin:left;transition:transform .3s cubic-bezier(.22,1,.36,1);z-index:0;}
+        .btn-save:hover .fill{transform:scaleX(1);}
+        .btn-save:hover{color:#000;box-shadow:0 0 26px rgba(0,200,255,0.28);}
+        .btn-save span{position:relative;z-index:1;}
+        .btn-test{background:var(--purple-dim);border:1px solid rgba(167,139,250,0.3);color:var(--purple);font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.08em;cursor:pointer;padding:11px 20px;border-radius:3px;transition:all .2s;}
+        .btn-test:hover{background:rgba(167,139,250,0.15);box-shadow:0 0 18px rgba(167,139,250,0.15);}
+        .btn-test:disabled{opacity:.5;cursor:not-allowed;}
+
+        /* SECTION CARDS */
+        .section{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:24px;margin-bottom:20px;position:relative;overflow:hidden;animation:fadeUp .5s ease both;}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+        .section:nth-child(2){animation-delay:.05s;}
+        .section:nth-child(3){animation-delay:.1s;}
+        .section:nth-child(4){animation-delay:.15s;}
+        .section:nth-child(5){animation-delay:.2s;}
+        .section::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;opacity:.35;}
+        .discord-card::before{background:linear-gradient(90deg,transparent,#5865f2,transparent);}
+        .email-card::before{background:linear-gradient(90deg,transparent,var(--cyan),transparent);}
+        .telegram-card::before{background:linear-gradient(90deg,transparent,#29b6f6,transparent);}
+        .events-card::before{background:linear-gradient(90deg,transparent,var(--green),transparent);}
+
+        .section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+        .section-title{display:flex;align-items:center;gap:12px;font-size:17px;font-weight:700;letter-spacing:.04em;color:#fff;}
+        .section-icon{width:36px;height:36px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+        .icon-discord{background:rgba(88,101,242,0.15);border:1px solid rgba(88,101,242,0.25);}
+        .icon-email{background:var(--cyan-dim);border:1px solid rgba(0,200,255,0.2);}
+        .icon-telegram{background:rgba(41,182,246,0.12);border:1px solid rgba(41,182,246,0.22);}
+        .icon-events{background:var(--green-dim);border:1px solid rgba(0,255,157,0.2);}
+
+        /* TOGGLE SWITCH */
+        .toggle-wrap{display:flex;align-items:center;gap:10px;}
+        .toggle{position:relative;width:46px;height:24px;flex-shrink:0;}
+        .toggle input{opacity:0;width:0;height:0;}
+        .slider{position:absolute;cursor:pointer;inset:0;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:24px;transition:.3s;}
+        .slider::before{content:'';position:absolute;height:18px;width:18px;left:2px;bottom:2px;background:var(--muted);border-radius:50%;transition:.3s;}
+        input:checked+.slider{background:rgba(0,200,255,0.2);border-color:var(--cyan);}
+        input:checked+.slider::before{background:var(--cyan);transform:translateX(22px);box-shadow:0 0 8px var(--cyan);}
+        .toggle-label{font-family:var(--display);font-size:14px;font-weight:600;letter-spacing:.04em;color:var(--text);}
+
+        /* FIELDS */
+        .fields{display:grid;gap:14px;}
+        .fields-2{grid-template-columns:1fr 1fr;}
+        .fields-3{grid-template-columns:2fr 1fr 1fr;}
+        label.fl{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;color:var(--cyan);opacity:.65;text-transform:uppercase;margin-bottom:7px;}
+        .input-row{position:relative;}
+        .i-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--cyan);opacity:.3;pointer-events:none;}
+        input[type=text],input[type=email],input[type=password],input[type=number],input[type=url]{width:100%;padding:11px 11px 11px 34px;background:rgba(0,200,255,0.04);border:1px solid rgba(0,200,255,0.13);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:13px;letter-spacing:.04em;outline:none;transition:all .2s;}
+        input[type=text]:focus,input[type=email]:focus,input[type=password]:focus,input[type=number]:focus,input[type=url]:focus{border-color:var(--cyan);background:rgba(0,200,255,0.07);box-shadow:0 0 0 3px rgba(0,200,255,0.08);}
+        input::placeholder{color:rgba(61,96,112,0.6);}
+        .helper{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:5px;}
+
+        /* DISABLED SECTION */
+        .section-body{transition:opacity .25s;}
+        .section-body.muted{opacity:.35;pointer-events:none;}
+
+        /* EVENTS GRID */
+        .events-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+        .event-toggle{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:4px;background:rgba(0,200,255,0.03);border:1px solid rgba(0,200,255,0.08);transition:border-color .2s,background .2s;}
+        .event-toggle:hover{border-color:rgba(0,200,255,0.18);background:rgba(0,200,255,0.05);}
+        .event-label{font-family:var(--mono);font-size:12px;color:var(--muted-mid);}
+
+        /* TEST RESULTS */
+        .test-results{margin-top:16px;display:none;flex-direction:column;gap:8px;}
+        .test-results.visible{display:flex;}
+        .test-result{padding:11px 14px;border-radius:3px;font-family:var(--mono);font-size:12.5px;display:flex;align-items:center;gap:10px;}
+        .test-ok{background:rgba(0,255,157,0.07);border:1px solid rgba(0,255,157,0.2);color:var(--green);}
+        .test-fail{background:var(--red-dim);border:1px solid rgba(255,64,96,0.2);color:#ff8090;}
+
+        /* SAVE ROW */
+        .save-row{display:flex;gap:12px;align-items:center;margin-top:4px;}
+        .save-row .btn-save{flex:1;}
+
+        /* TOAST */
+        .toast{position:fixed;bottom:22px;right:22px;padding:12px 17px;border-radius:4px;font-family:var(--mono);font-size:12.5px;display:none;z-index:9999;backdrop-filter:blur(12px);border-left:2px solid var(--cyan);background:rgba(0,14,28,0.95);color:var(--cyan);box-shadow:0 16px 40px rgba(0,0,0,0.5);letter-spacing:.04em;max-width:320px;}
+        .toast.err{border-left-color:var(--red);color:#ff8090;}
+
+        /* SETUP GUIDE */
+        .guide{font-family:var(--mono);font-size:12px;color:var(--muted);background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:3px;padding:12px 14px;margin-top:14px;line-height:1.8;}
+        .guide a{color:var(--cyan);text-decoration:none;}
+        .guide a:hover{text-decoration:underline;}
+        .guide code{background:rgba(0,200,255,0.1);padding:1px 6px;border-radius:2px;color:var(--cyan);}
+
+        @media(max-width:700px){body{padding:16px;}.fields-2,.fields-3{grid-template-columns:1fr;}.events-grid{grid-template-columns:1fr 1fr;}}
+        @media(max-width:480px){.events-grid{grid-template-columns:1fr;}}
+    </style>
+</head>
+<body>
+<div class="bg-layer">
+    <div class="grid-overlay"></div><div class="scanlines"></div>
+    <div class="gs gs1"></div><div class="gs gs2"></div>
+</div>
+
+<div class="page">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+        <div>
+            <div class="brand-row">
+                <div class="brand-icon">🔔</div>
+                <span style="font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--cyan);opacity:.7;">WIREGUARD ACCESS PANEL</span>
+            </div>
+            <h1>NOTIFICATION SETTINGS</h1>
+            <p class="page-sub">// Configure Discord, Email, and Telegram alerts</p>
+        </div>
+        <a href="{{ url_for('home') }}"><button class="btn btn-ghost" type="button">← DASHBOARD</button></a>
+    </div>
+
+    <form method="post" action="{{ url_for('notifications_save') }}" id="mainForm">
+
+        <!-- ── DISCORD ── -->
+        <div class="section discord-card">
+            <div class="section-header">
+                <div class="section-title">
+                    <div class="section-icon icon-discord">🎮</div>
+                    Discord Webhook
+                </div>
+                <label class="toggle-wrap">
+                    <label class="toggle">
+                        <input type="checkbox" name="discord_enabled" id="discordToggle"
+                            {% if s.discord_enabled %}checked{% endif %}
+                            onchange="syncBody('discordToggle','discordBody')">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="toggle-label">Enabled</span>
+                </label>
+            </div>
+
+            <div class="section-body {% if not s.discord_enabled %}muted{% endif %}" id="discordBody">
+                <div class="fields">
+                    <div>
+                        <label class="fl">Webhook URL</label>
+                        <div class="input-row">
+                            <span class="i-icon">🔗</span>
+                            <input type="url" name="discord_webhook" value="{{ s.discord_webhook or '' }}"
+                                placeholder="https://discord.com/api/webhooks/...">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="guide">
+                    <strong style="color:var(--text);">How to get a Discord Webhook URL:</strong><br>
+                    1. Open your Discord server → right-click the channel → <code>Edit Channel</code><br>
+                    2. Go to <code>Integrations</code> → <code>Webhooks</code> → <code>New Webhook</code><br>
+                    3. Copy the webhook URL and paste it above.
+                </div>
+            </div>
+        </div>
+
+        <!-- ── EMAIL ── -->
+        <div class="section email-card">
+            <div class="section-header">
+                <div class="section-title">
+                    <div class="section-icon icon-email">📧</div>
+                    Email (SMTP)
+                </div>
+                <label class="toggle-wrap">
+                    <label class="toggle">
+                        <input type="checkbox" name="email_enabled" id="emailToggle"
+                            {% if s.email_enabled %}checked{% endif %}
+                            onchange="syncBody('emailToggle','emailBody')">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="toggle-label">Enabled</span>
+                </label>
+            </div>
+
+            <div class="section-body {% if not s.email_enabled %}muted{% endif %}" id="emailBody">
+                <div class="fields fields-2" style="margin-bottom:14px;">
+                    <div>
+                        <label class="fl">SMTP Host</label>
+                        <div class="input-row">
+                            <span class="i-icon">🌐</span>
+                            <input type="text" name="email_host" value="{{ s.email_host or '' }}"
+                                placeholder="smtp.gmail.com">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="fl">Port</label>
+                        <div class="input-row">
+                            <span class="i-icon">#</span>
+                            <input type="number" name="email_port" value="{{ s.email_port or 587 }}"
+                                placeholder="587">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="fields fields-2" style="margin-bottom:14px;">
+                    <div>
+                        <label class="fl">SMTP Username</label>
+                        <div class="input-row">
+                            <span class="i-icon">◈</span>
+                            <input type="text" name="email_user" value="{{ s.email_user or '' }}"
+                                placeholder="you@gmail.com">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="fl">SMTP Password / App Password</label>
+                        <div class="input-row">
+                            <span class="i-icon">◉</span>
+                            <input type="password" name="email_pass" value="{{ s.email_pass or '' }}"
+                                placeholder="••••••••••••">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="fields fields-2" style="margin-bottom:14px;">
+                    <div>
+                        <label class="fl">From Address</label>
+                        <div class="input-row">
+                            <span class="i-icon">✉</span>
+                            <input type="email" name="email_from" value="{{ s.email_from or '' }}"
+                                placeholder="vpn@yourdomain.com">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="fl">Send Alerts To</label>
+                        <div class="input-row">
+                            <span class="i-icon">→</span>
+                            <input type="email" name="email_to" value="{{ s.email_to or '' }}"
+                                placeholder="admin@yourdomain.com">
+                        </div>
+                    </div>
+                </div>
+
+                <label class="toggle-wrap" style="margin-top:4px;">
+                    <label class="toggle">
+                        <input type="checkbox" name="email_tls" {% if s.email_tls %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="toggle-label" style="font-size:13px;">Use STARTTLS (recommended — port 587)</span>
+                </label>
+                <div class="helper" style="margin-top:10px;">Uncheck for SSL/TLS on port 465. Gmail requires an App Password (not your regular password).</div>
+
+                <div class="guide" style="margin-top:14px;">
+                    <strong style="color:var(--text);">Gmail App Password setup:</strong><br>
+                    1. Go to <a href="https://myaccount.google.com/security" target="_blank">Google Account → Security</a><br>
+                    2. Enable 2-Step Verification if not already on<br>
+                    3. Search "App Passwords" → create one for "Mail"<br>
+                    4. Use the 16-character password above — <strong>not</strong> your Gmail password.
+                </div>
+            </div>
+        </div>
+
+        <!-- ── TELEGRAM ── -->
+        <div class="section telegram-card">
+            <div class="section-header">
+                <div class="section-title">
+                    <div class="section-icon icon-telegram">✈️</div>
+                    Telegram Bot
+                </div>
+                <label class="toggle-wrap">
+                    <label class="toggle">
+                        <input type="checkbox" name="telegram_enabled" id="telegramToggle"
+                            {% if s.telegram_enabled %}checked{% endif %}
+                            onchange="syncBody('telegramToggle','telegramBody')">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="toggle-label">Enabled</span>
+                </label>
+            </div>
+
+            <div class="section-body {% if not s.telegram_enabled %}muted{% endif %}" id="telegramBody">
+                <div class="fields fields-2">
+                    <div>
+                        <label class="fl">Bot Token</label>
+                        <div class="input-row">
+                            <span class="i-icon">🤖</span>
+                            <input type="text" name="telegram_token" value="{{ s.telegram_token or '' }}"
+                                placeholder="123456789:ABCdef...">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="fl">Chat ID</label>
+                        <div class="input-row">
+                            <span class="i-icon">#</span>
+                            <input type="text" name="telegram_chat_id" value="{{ s.telegram_chat_id or '' }}"
+                                placeholder="-1001234567890">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="guide" style="margin-top:14px;">
+                    <strong style="color:var(--text);">How to set up a Telegram bot:</strong><br>
+                    1. Open Telegram → search <code>@BotFather</code> → send <code>/newbot</code><br>
+                    2. Follow the prompts — copy the <strong>bot token</strong> above<br>
+                    3. Add the bot to your group or start a DM with it<br>
+                    4. Get your <strong>Chat ID</strong>: send a message, then visit<br>
+                    &nbsp;&nbsp;&nbsp;<code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code><br>
+                    5. Look for <code>"chat":{"id": ...}</code> — that number is your Chat ID.<br>
+                    Use a negative number for group chats (e.g. <code>-1001234567890</code>).
+                </div>
+            </div>
+        </div>
+
+        <!-- ── EVENTS ── -->
+        <div class="section events-card">
+            <div class="section-header">
+                <div class="section-title">
+                    <div class="section-icon icon-events">⚡</div>
+                    Alert Events
+                </div>
+                <span style="font-family:var(--mono);font-size:11px;color:var(--muted);">// Choose which events trigger alerts</span>
+            </div>
+
+            <div class="events-grid">
+                <label class="event-toggle">
+                    <label class="toggle">
+                        <input type="checkbox" name="notify_connect" {% if s.notify_connect %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="event-label">🟢 Peer Connected</span>
+                </label>
+
+                <label class="event-toggle">
+                    <label class="toggle">
+                        <input type="checkbox" name="notify_disconnect" {% if s.notify_disconnect %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="event-label">🔴 Peer Disconnected</span>
+                </label>
+
+                <label class="event-toggle">
+                    <label class="toggle">
+                        <input type="checkbox" name="notify_expiry" {% if s.notify_expiry %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="event-label">⏳ Client Expired</span>
+                </label>
+
+                <label class="event-toggle">
+                    <label class="toggle">
+                        <input type="checkbox" name="notify_new_client" {% if s.notify_new_client %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="event-label">➕ New Client Created</span>
+                </label>
+
+                <label class="event-toggle">
+                    <label class="toggle">
+                        <input type="checkbox" name="notify_delete" {% if s.notify_delete %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="event-label">🗑 Client Deleted</span>
+                </label>
+
+                <label class="event-toggle">
+                    <label class="toggle">
+                        <input type="checkbox" name="notify_regen" {% if s.notify_regen %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="event-label">↻ Keys Regenerated</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- ── SAVE + TEST ── -->
+        <div class="save-row">
+            <button class="btn-save" type="submit">
+                <div class="fill"></div>
+                <span>SAVE SETTINGS →</span>
+            </button>
+            <button class="btn-test" type="button" id="testBtn" onclick="sendTest()">
+                🧪 SEND TEST
+            </button>
+        </div>
+
+    </form>
+
+    <!-- TEST RESULTS -->
+    <div class="test-results" id="testResults"></div>
+
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+    // Toggle section body opacity when enable checkbox changes
+    function syncBody(toggleId, bodyId) {
+        const isOn = document.getElementById(toggleId).checked;
+        const body = document.getElementById(bodyId);
+        body.classList.toggle('muted', !isOn);
+    }
+
+    // Show toast
+    function showToast(msg, isErr=false) {
+        const t = document.getElementById('toast');
+        t.innerText = msg;
+        t.className = 'toast' + (isErr ? ' err' : '');
+        t.style.display = 'block';
+        clearTimeout(window._tt);
+        window._tt = setTimeout(() => t.style.display='none', 4000);
+    }
+
+    // ── UNSAVED CHANGES GUARD ──
+    let formDirty = false;
+    document.getElementById('mainForm').addEventListener('change', () => { formDirty = true; });
+    document.getElementById('mainForm').addEventListener('submit', () => { formDirty = false; });
+    window.addEventListener('beforeunload', e => {
+        if (formDirty) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+
+    // Send test notification
+    function sendTest() {
+        const btn = document.getElementById('testBtn');
+        const results = document.getElementById('testResults');
+        btn.disabled = true;
+        btn.innerText = '⏳ SENDING...';
+        results.innerHTML = '';
+        results.classList.remove('visible');
+
+        const form = document.getElementById('mainForm');
+        const data = new FormData(form);
+
+        fetch('{{ url_for("notifications_test") }}', {
+            method: 'POST',
+            body: data
+        })
+        .then(r => r.json())
+        .then(list => {
+            results.innerHTML = '';
+            list.forEach(r => {
+                const div = document.createElement('div');
+                div.className = 'test-result ' + (r.ok ? 'test-ok' : 'test-fail');
+                div.innerHTML = `<span>${r.ok ? '✓' : '✗'}</span> <strong>${r.channel}:</strong> ${r.ok ? 'Delivered successfully' : r.error}`;
+                results.appendChild(div);
+            });
+            results.classList.add('visible');
+            showToast(list.every(r=>r.ok) ? '// All test messages sent ✓' : 'Some channels failed — check results below', !list.every(r=>r.ok));
+        })
+        .catch(e => {
+            showToast('Test request failed: ' + e, true);
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerText = '🧪 SEND TEST';
+        });
+    }
+
+    // Flash messages
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    window.addEventListener('DOMContentLoaded', () => {
+        const msg = {{ messages[0]|tojson }};
+        const isErr = msg.toLowerCase().includes('error');
+        showToast(msg, isErr);
+    });
+    {% endif %}
+    {% endwith %}
+</script>
+</body>
+</html>

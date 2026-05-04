@@ -1,0 +1,9 @@
+.env
+vpn_dashboard.db
+qr_codes/
+clients/
+venv/
+__pycache__/
+*.pyc
+*.png
+*.conf

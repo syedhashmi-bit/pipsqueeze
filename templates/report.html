@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weekly Report</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root{--bg:#030508;--panel:rgba(6,14,24,0.93);--border:rgba(0,200,255,0.1);--border-lit:rgba(0,200,255,0.4);--cyan:#00c8ff;--cyan-dim:rgba(0,200,255,0.07);--green:#00ff9d;--green-dim:rgba(0,255,157,0.07);--red:#ff4060;--red-dim:rgba(255,64,96,0.09);--yellow:#ffc940;--yellow-dim:rgba(255,201,64,0.09);--text:#c8e0ee;--muted:#3d6070;--muted-mid:#6a8ea0;--mono:'Share Tech Mono',monospace;--display:'Rajdhani',sans-serif;}
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:var(--display);background:var(--bg);color:var(--text);min-height:100vh;padding:28px 32px;}
+        .bg-layer{position:fixed;inset:0;z-index:0;pointer-events:none;}
+        .grid-overlay{position:absolute;inset:0;background-image:linear-gradient(rgba(0,200,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,0.04) 1px,transparent 1px);background-size:44px 44px;}
+        .scanlines{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.12) 3px,rgba(0,0,0,0.12) 4px);}
+        .gs{position:absolute;border-radius:50%;filter:blur(140px);}
+        .gs1{width:800px;height:800px;background:#001830;top:-300px;left:-250px;opacity:.45;}
+        .gs2{width:500px;height:500px;background:#001020;bottom:-150px;right:-150px;opacity:.35;}
+        .page{max-width:1060px;margin:auto;position:relative;z-index:1;}
+        .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:26px;padding-bottom:18px;border-bottom:1px solid var(--border);}
+        h1{font-size:26px;font-weight:700;letter-spacing:.05em;color:#fff;}
+        .sub{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:4px;}
+        .topbar-right{display:flex;gap:10px;align-items:center;}
+        .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:3px;font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.06em;cursor:pointer;text-decoration:none;transition:all .2s;white-space:nowrap;border:none;}
+        .btn-ghost{background:transparent;border:1px solid var(--border-lit);color:var(--cyan);}
+        .btn-ghost:hover{background:var(--cyan-dim);}
+        .btn-green{background:var(--green-dim);border:1px solid rgba(0,255,157,0.3);color:var(--green);}
+        .btn-green:hover{background:rgba(0,255,157,0.12);}
+
+        /* STAT STRIP */
+        .stat-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
+        .stat{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:20px;text-align:center;position:relative;overflow:hidden;}
+        .stat::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;}
+        .stat:nth-child(1)::after{background:linear-gradient(90deg,transparent,var(--cyan),transparent);}
+        .stat:nth-child(2)::after{background:linear-gradient(90deg,transparent,var(--red),transparent);}
+        .stat:nth-child(3)::after{background:linear-gradient(90deg,transparent,var(--yellow),transparent);}
+        .stat:nth-child(4)::after{background:linear-gradient(90deg,transparent,var(--green),transparent);}
+        .stat-val{font-size:34px;font-weight:700;margin-bottom:6px;}
+        .stat-label{font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.15em;text-transform:uppercase;}
+
+        /* MAIN GRID */
+        .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;}
+        .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+
+        /* CARD */
+        .card{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:22px;position:relative;overflow:hidden;}
+        .card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,200,255,0.3),transparent);opacity:.35;}
+        .card-title{font-size:15px;font-weight:700;letter-spacing:.06em;color:#fff;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+
+        /* TABLE */
+        table{width:100%;border-collapse:collapse;}
+        th{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;padding:9px 12px;text-align:left;border-bottom:1px solid var(--border);background:rgba(0,200,255,0.02);}
+        td{padding:11px 12px;font-size:13px;border-bottom:1px solid rgba(0,200,255,0.05);}
+        tr:last-child td{border-bottom:none;}
+        tr:hover td{background:rgba(0,200,255,0.02);}
+        .rank{font-family:var(--mono);color:var(--muted);font-size:12px;}
+        .cname{font-weight:700;color:#fff;}
+        .mono{font-family:var(--mono);font-size:12.5px;}
+        .c-green{color:var(--green);}
+        .c-blue{color:#58a6ff;}
+        .c-cyan{color:var(--cyan);}
+        .c-yellow{color:var(--yellow);}
+        .c-red{color:var(--red);}
+        .c-muted{color:var(--muted-mid);}
+
+        /* UPTIME BAR */
+        .uptime-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(0,200,255,0.05);}
+        .uptime-row:last-child{border-bottom:none;}
+        .uptime-name{font-weight:600;font-size:13.5px;min-width:100px;}
+        .uptime-bar-wrap{flex:1;height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;}
+        .uptime-bar{height:100%;border-radius:3px;transition:width .6s ease;}
+        .uptime-pct{font-family:var(--mono);font-size:12px;min-width:46px;text-align:right;}
+
+        /* EXPIRY LIST */
+        .expiry-item{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:3px;background:rgba(255,201,64,0.05);border:1px solid rgba(255,201,64,0.15);margin-bottom:8px;}
+        .expiry-item:last-child{margin-bottom:0;}
+        .expiry-name{font-weight:700;font-size:13.5px;}
+        .expiry-date{font-family:var(--mono);font-size:12px;color:var(--yellow);}
+
+        /* EVENT BADGES */
+        .ev-conn{color:var(--green);}
+        .ev-disc{color:var(--red);}
+
+        .empty{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-align:center;padding:24px;}
+
+        /* TOAST */
+        .toast{position:fixed;bottom:22px;right:22px;padding:12px 17px;border-radius:4px;font-family:var(--mono);font-size:12.5px;display:none;z-index:9999;backdrop-filter:blur(12px);border-left:2px solid var(--cyan);background:rgba(0,14,28,0.95);color:var(--cyan);box-shadow:0 16px 40px rgba(0,0,0,0.5);letter-spacing:.04em;max-width:320px;}
+        .toast.err{border-left-color:var(--red);color:#ff8090;}
+
+        @media(max-width:800px){body{padding:16px;}.stat-strip{grid-template-columns:1fr 1fr;}.grid,.grid-3{grid-template-columns:1fr;}}
+    </style>
+</head>
+<body>
+<div class="bg-layer"><div class="grid-overlay"></div><div class="scanlines"></div><div class="gs gs1"></div><div class="gs gs2"></div></div>
+
+<div class="page">
+    <div class="topbar">
+        <div>
+            <h1>📊 WEEKLY REPORT</h1>
+            <div class="sub">// {{ report.period }} &nbsp;·&nbsp; Generated {{ report.generated_at }}</div>
+        </div>
+        <div class="topbar-right">
+            <button class="btn btn-green" type="button" onclick="sendDigest()" id="digestBtn">📧 SEND DIGEST</button>
+            <a class="btn btn-ghost" href="{{ url_for('home') }}">← DASHBOARD</a>
+        </div>
+    </div>
+
+    <!-- STAT STRIP -->
+    <div class="stat-strip">
+        <div class="stat">
+            <div class="stat-val" style="color:var(--cyan);">{{ report.total_clients }}</div>
+            <div class="stat-label">// Total Clients</div>
+        </div>
+        <div class="stat">
+            <div class="stat-val" style="color:var(--red);">{{ report.disabled_clients }}</div>
+            <div class="stat-label">// Disabled</div>
+        </div>
+        <div class="stat">
+            <div class="stat-val" style="color:var(--yellow);">{{ report.expiring_soon|length }}</div>
+            <div class="stat-label">// Expiring ≤7d</div>
+        </div>
+        <div class="stat">
+            <div class="stat-val" style="color:var(--green);">{{ report.top_users|length }}</div>
+            <div class="stat-label">// Active This Week</div>
+        </div>
+    </div>
+
+    <!-- ROW 1: Data Users + Uptime -->
+    <div class="grid" style="margin-bottom:18px;">
+
+        <!-- TOP DATA USERS -->
+        <div class="card">
+            <div class="card-title">🏆 TOP DATA USERS</div>
+            {% if report.top_users %}
+            <table>
+                <thead><tr><th>#</th><th>Client</th><th>RX</th><th>TX</th><th>Total</th></tr></thead>
+                <tbody>
+                    {% for u in report.top_users %}
+                    <tr>
+                        <td class="rank">#{{ loop.index }}</td>
+                        <td class="cname">{{ u.client }}</td>
+                        <td class="mono c-green">{{ u.rx }}</td>
+                        <td class="mono c-blue">{{ u.tx }}</td>
+                        <td class="mono c-cyan">{{ u.total }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">// No traffic data yet</div>
+            {% endif %}
+        </div>
+
+        <!-- UPTIME LEADERS -->
+        <div class="card">
+            <div class="card-title">📶 UPTIME LEADERS (7 DAYS)</div>
+            {% if report.uptime_leaders %}
+            <div>
+                {% for u in report.uptime_leaders %}
+                <div class="uptime-row">
+                    <span class="uptime-name">{{ u.client }}</span>
+                    <div class="uptime-bar-wrap">
+                        <div class="uptime-bar" style="width:{{ u.uptime }}%;background:{% if u.uptime >= 90 %}var(--green){% elif u.uptime >= 70 %}var(--yellow){% else %}var(--red){% endif %};"></div>
+                    </div>
+                    <span class="uptime-pct {% if u.uptime >= 90 %}c-green{% elif u.uptime >= 70 %}c-yellow{% else %}c-red{% endif %}">{{ u.uptime }}%</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty">// Uptime data builds up over time — check back after a few hours</div>
+            {% endif %}
+        </div>
+
+    </div>
+
+    <!-- ROW 2: Expiry + Connection Events -->
+    <div class="grid">
+
+        <!-- EXPIRING SOON -->
+        <div class="card">
+            <div class="card-title">⏳ EXPIRING WITHIN 7 DAYS</div>
+            {% if report.expiring_soon %}
+            {% for e in report.expiring_soon %}
+            <div class="expiry-item">
+                <span class="expiry-name">{{ e.name }}</span>
+                <span class="expiry-date">{{ e.expires_at }}</span>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty">// No clients expiring soon</div>
+            {% endif %}
+        </div>
+
+        <!-- CONNECTION EVENTS -->
+        <div class="card">
+            <div class="card-title">🔌 CONNECTION EVENTS</div>
+            {% if report.connection_events %}
+            <table>
+                <thead><tr><th>Client</th><th>Event</th><th>Count</th></tr></thead>
+                <tbody>
+                    {% for ev in report.connection_events %}
+                    <tr>
+                        <td class="cname">{{ ev.client }}</td>
+                        <td class="mono {% if ev.event == 'connected' %}ev-conn{% else %}ev-disc{% endif %}">{{ ev.event|upper }}</td>
+                        <td class="mono c-cyan">{{ ev.count }}×</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">// No connection events this week</div>
+            {% endif %}
+        </div>
+
+    </div>
+
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-align:right;margin-top:16px;">
+        Generated {{ report.generated_at }} UTC &nbsp;·&nbsp; Auto-sends every {{ digest_day|default('Monday')|title }}
+    </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+function showToast(msg,isErr=false){
+    const t=document.getElementById('toast');
+    t.innerText=msg;t.className='toast'+(isErr?' err':'');t.style.display='block';
+    clearTimeout(window._tt);window._tt=setTimeout(()=>{t.style.display='none';},4000);
+}
+
+function sendDigest(){
+    const btn=document.getElementById('digestBtn');
+    btn.disabled=true;btn.innerText='⏳ SENDING...';
+    fetch('/api/send-digest',{method:'POST'})
+        .then(r=>r.json())
+        .then(d=>{
+            if(d.ok) showToast('// Weekly digest sent ✓');
+            else showToast('Failed: '+(d.error||'Unknown error'),true);
+        })
+        .catch(()=>showToast('Request failed',true))
+        .finally(()=>{btn.disabled=false;btn.innerText='📧 SEND DIGEST';});
+}
+</script>
+</body>
+</html>

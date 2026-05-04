@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root{
+            --bg:#030508;--surface:#060c13;--panel:rgba(6,14,24,0.93);
+            --border:rgba(0,200,255,0.1);--border-lit:rgba(0,200,255,0.4);
+            --cyan:#00c8ff;--cyan-dim:rgba(0,200,255,0.07);
+            --green:#00ff9d;--green-dim:rgba(0,255,157,0.07);
+            --red:#ff4060;--red-dim:rgba(255,64,96,0.09);
+            --yellow:#ffc940;--yellow-dim:rgba(255,201,64,0.09);
+            --text:#c8e0ee;--muted:#3d6070;--muted-mid:#6a8ea0;
+            --mono:'Share Tech Mono',monospace;--display:'Rajdhani',sans-serif;
+        }
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:var(--display);background:var(--bg);color:var(--text);min-height:100vh;padding:28px 32px;overflow-x:hidden;}
+        .bg-layer{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+        .grid-overlay{position:absolute;inset:0;background-image:linear-gradient(rgba(0,200,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,0.04) 1px,transparent 1px);background-size:44px 44px;animation:gridMove 20s linear infinite;}
+        @keyframes gridMove{to{background-position:44px 44px;}}
+        .scanlines{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.12) 3px,rgba(0,0,0,0.12) 4px);}
+        .gs{position:absolute;border-radius:50%;filter:blur(140px);}
+        .gs1{width:800px;height:800px;background:#001830;top:-300px;left:-250px;opacity:.45;}
+        .gs2{width:500px;height:500px;background:#001020;bottom:-150px;right:-150px;opacity:.35;}
+        .page{max-width:1100px;margin:auto;position:relative;z-index:1;}
+
+        /* TOPBAR */
+        .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:26px;padding-bottom:18px;border-bottom:1px solid var(--border);animation:fadeDown .5s ease both;}
+        @keyframes fadeDown{from{opacity:0;transform:translateY(-12px);}to{opacity:1;transform:translateY(0);}}
+        .brand-row{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
+        .brand-icon{width:40px;height:40px;border-radius:6px;background:rgba(255,64,96,0.1);border:1px solid rgba(255,64,96,0.2);display:flex;align-items:center;justify-content:center;font-size:18px;}
+        h1{font-size:26px;font-weight:700;letter-spacing:.05em;color:#fff;}
+        .page-sub{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:4px;}
+        .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:3px;font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.06em;cursor:pointer;text-decoration:none;transition:all .2s;white-space:nowrap;border:none;}
+        .btn-ghost{background:transparent;border:1px solid var(--border-lit);color:var(--cyan);}
+        .btn-ghost:hover{background:var(--cyan-dim);}
+        .btn-danger{background:var(--red-dim);border:1px solid rgba(255,64,96,0.3);color:var(--red);}
+        .btn-danger:hover{background:rgba(255,64,96,0.14);}
+        .btn-green{background:var(--green-dim);border:1px solid rgba(0,255,157,0.3);color:var(--green);}
+        .btn-green:hover{background:rgba(0,255,157,0.12);}
+        .btn-sm{padding:6px 12px;font-size:11.5px;}
+
+        /* CONFIG STRIP */
+        .config-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px;animation:fadeUp .5s .04s ease both;}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+        .cfg-card{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:18px 20px;position:relative;overflow:hidden;}
+        .cfg-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;}
+        .cfg-card:nth-child(1)::after{background:linear-gradient(90deg,transparent,var(--yellow),transparent);}
+        .cfg-card:nth-child(2)::after{background:linear-gradient(90deg,transparent,var(--cyan),transparent);}
+        .cfg-card:nth-child(3)::after{background:linear-gradient(90deg,transparent,var(--green),transparent);}
+        .cfg-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
+        .cfg-val{font-size:22px;font-weight:700;letter-spacing:-.01em;}
+        .cfg-sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:5px;}
+
+        /* GRID */
+        .main-grid{display:grid;grid-template-columns:1fr 1.6fr;gap:18px;animation:fadeUp .5s .08s ease both;}
+
+        /* PANEL */
+        .panel{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:22px;margin-bottom:16px;position:relative;overflow:hidden;transition:border-color .25s;}
+        .panel:last-child{margin-bottom:0;}
+        .panel:hover{border-color:rgba(0,200,255,0.18);}
+        .panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,200,255,0.3),transparent);opacity:0;transition:opacity .3s;}
+        .panel:hover::before{opacity:1;}
+        .panel-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);}
+        .panel-title{font-size:15px;font-weight:700;letter-spacing:.06em;color:#fff;}
+        .chip{font-family:var(--mono);font-size:10.5px;padding:4px 9px;border-radius:2px;background:var(--cyan-dim);border:1px solid rgba(0,200,255,0.15);color:var(--cyan);}
+        .chip-green{background:var(--green-dim);border-color:rgba(0,255,157,0.15);color:var(--green);}
+        .chip-red{background:var(--red-dim);border-color:rgba(255,64,96,0.15);color:var(--red);}
+        .chip-yellow{background:var(--yellow-dim);border-color:rgba(255,201,64,0.15);color:var(--yellow);}
+
+        /* MY IP */
+        .my-ip-box{padding:14px 16px;background:rgba(0,255,157,0.04);border:1px solid rgba(0,255,157,0.15);border-radius:4px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;}
+        .my-ip-label{font-family:var(--mono);font-size:11.5px;color:var(--muted-mid);}
+        .my-ip-val{font-family:var(--mono);font-size:13px;color:var(--green);font-weight:700;}
+
+        /* WHITELIST */
+        .wl-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
+        .wl-item{display:flex;justify-content:space-between;align-items:center;padding:10px 13px;border-radius:3px;background:rgba(0,200,255,0.03);border:1px solid rgba(0,200,255,0.08);font-family:var(--mono);font-size:13px;color:var(--cyan);}
+        .wl-item form{margin:0;}
+        .wl-empty{font-family:var(--mono);font-size:12.5px;color:var(--muted);padding:14px;text-align:center;border:1px dashed rgba(0,200,255,0.1);border-radius:3px;}
+        .wl-note{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:10px;line-height:1.7;}
+        .wl-note code{background:rgba(0,200,255,0.1);color:var(--cyan);padding:1px 6px;border-radius:2px;}
+        label.fl{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;color:var(--cyan);opacity:.65;text-transform:uppercase;margin-bottom:7px;}
+        .input-row{position:relative;display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+        .i-icon{position:absolute;left:11px;font-size:13px;color:var(--cyan);opacity:.3;pointer-events:none;}
+        input[type=text]{flex:1;padding:11px 11px 11px 34px;background:rgba(0,200,255,0.04);border:1px solid rgba(0,200,255,0.13);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;transition:all .2s;}
+        input[type=text]:focus{border-color:var(--cyan);background:rgba(0,200,255,0.07);box-shadow:0 0 0 3px rgba(0,200,255,0.08);}
+        input::placeholder{color:rgba(61,96,112,0.6);}
+
+        /* LOCKS */
+        .lock-list{display:flex;flex-direction:column;gap:8px;}
+        .lock-item{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-radius:3px;background:rgba(255,64,96,0.05);border:1px solid rgba(255,64,96,0.15);}
+        .lock-ip{font-family:var(--mono);font-size:13px;color:var(--red);}
+        .lock-meta{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px;}
+        .lock-right{display:flex;align-items:center;gap:10px;}
+        .lock-count{font-family:var(--mono);font-size:12px;color:var(--yellow);}
+        .lock-item form{margin:0;}
+
+        /* AUDIT TABLE */
+        .table-shell{border:1px solid rgba(0,200,255,0.08);border-radius:4px;overflow:hidden;}
+        table{width:100%;border-collapse:collapse;}
+        th{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);background:rgba(0,200,255,0.02);}
+        td{padding:11px 12px;font-size:13px;border-bottom:1px solid rgba(0,200,255,0.05);vertical-align:middle;}
+        tr:last-child td{border-bottom:none;}
+        tr:hover td{background:rgba(0,200,255,0.02);}
+        .ip-cell{font-family:var(--mono);font-size:12.5px;color:var(--cyan);}
+        .user-cell{font-family:var(--mono);font-size:12px;color:var(--muted-mid);}
+        .time-cell{font-family:var(--mono);font-size:11px;color:var(--muted);}
+        .reason-cell{font-family:var(--mono);font-size:11.5px;color:var(--muted-mid);}
+        .ok-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:2px;font-family:var(--mono);font-size:11px;font-weight:700;}
+        .ok-badge::before{content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+        .ok-yes{background:rgba(0,255,157,0.1);color:var(--green);border:1px solid rgba(0,255,157,0.2);}
+        .ok-yes::before{background:var(--green);}
+        .ok-no{background:var(--red-dim);color:#ff8090;border:1px solid rgba(255,64,96,0.2);}
+        .ok-no::before{background:#ff8090;}
+
+        /* PAGINATION */
+        .pagination{display:flex;justify-content:center;gap:8px;margin-top:14px;flex-wrap:wrap;}
+        .page-btn{padding:6px 12px;border-radius:3px;font-family:var(--mono);font-size:12px;cursor:pointer;text-decoration:none;border:1px solid var(--border);color:var(--muted-mid);background:transparent;transition:all .2s;}
+        .page-btn:hover,.page-btn.active{border-color:var(--cyan);color:var(--cyan);background:var(--cyan-dim);}
+        .page-btn.disabled{opacity:.35;pointer-events:none;}
+        .page-info{text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:8px;}
+
+        /* EMPTY */
+        .empty{text-align:center;padding:28px;font-family:var(--mono);font-size:12.5px;color:var(--muted);}
+
+        /* TOAST */
+        .toast{position:fixed;bottom:22px;right:22px;padding:12px 17px;border-radius:4px;font-family:var(--mono);font-size:12.5px;display:none;z-index:9999;backdrop-filter:blur(12px);border-left:2px solid var(--cyan);background:rgba(0,14,28,0.95);color:var(--cyan);box-shadow:0 16px 40px rgba(0,0,0,0.5);letter-spacing:.04em;max-width:320px;}
+        .toast.err{border-left-color:var(--red);color:#ff8090;}
+
+        @media(max-width:900px){body{padding:16px;}.topbar{flex-direction:column;gap:12px;align-items:flex-start;}.main-grid{grid-template-columns:1fr;}.config-strip{grid-template-columns:1fr;}}
+    </style>
+</head>
+<body>
+<div class="bg-layer"><div class="grid-overlay"></div><div class="scanlines"></div><div class="gs gs1"></div><div class="gs gs2"></div></div>
+
+<div class="page">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+        <div>
+            <div class="brand-row">
+                <div class="brand-icon">🔒</div>
+                <span style="font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--cyan);opacity:.7;">WIREGUARD ACCESS PANEL</span>
+            </div>
+            <h1>SECURITY</h1>
+            <p class="page-sub">// Login audit · Rate limiting · IP whitelist · Session control</p>
+        </div>
+        <a href="{{ url_for('home') }}"><button class="btn btn-ghost" type="button">← DASHBOARD</button></a>
+    </div>
+
+    <!-- CONFIG STRIP -->
+    <div class="config-strip">
+        <div class="cfg-card">
+            <div class="cfg-label">// Max Login Attempts</div>
+            <div class="cfg-val" style="color:var(--yellow);">{{ max_attempts }}</div>
+            <div class="cfg-sub">then locked for {{ lockout_mins }}m</div>
+        </div>
+        <div class="cfg-card">
+            <div class="cfg-label">// Session Timeout</div>
+            <div class="cfg-val" style="color:var(--cyan);">{{ session_timeout }}m</div>
+            <div class="cfg-sub">inactivity auto-logout</div>
+        </div>
+        <div class="cfg-card">
+            <div class="cfg-label">// IP Whitelist</div>
+            <div class="cfg-val" style="color:{% if whitelist %}var(--green){% else %}var(--muted-mid){% endif %};">
+                {% if whitelist %}{{ whitelist|length }} IPs{% else %}OFF{% endif %}
+            </div>
+            <div class="cfg-sub">{% if whitelist %}enforced{% else %}all IPs allowed{% endif %}</div>
+        </div>
+    </div>
+
+    <div class="main-grid">
+
+        <!-- LEFT: Whitelist + Locks -->
+        <div>
+
+            <!-- IP WHITELIST -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">🌐 IP WHITELIST</span>
+                    {% if whitelist %}
+                    <span class="chip chip-green">ACTIVE</span>
+                    {% else %}
+                    <span class="chip">DISABLED</span>
+                    {% endif %}
+                </div>
+
+                <div class="my-ip-box">
+                    <span class="my-ip-label">Your current IP</span>
+                    <span class="my-ip-val">{{ current_ip }}</span>
+                </div>
+
+                {% if whitelist %}
+                <div class="wl-list">
+                    {% for ip in whitelist %}
+                    <div class="wl-item">
+                        <span>{{ ip }}</span>
+                        <form method="post" action="{{ url_for('unlock_ip', ip_addr=ip) }}"
+                              onsubmit="return confirm('Remove {{ ip }} from whitelist?')">
+                            <button class="btn btn-danger btn-sm" type="submit">REMOVE</button>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="wl-empty">// No whitelist active — all IPs can reach the login page</div>
+                {% endif %}
+
+                <div class="wl-note" style="margin-top:14px;">
+                    Whitelist is configured via <code>IP_WHITELIST</code> in your <code>.env</code> file.<br>
+                    Example: <code>IP_WHITELIST=203.0.113.5,198.51.100.10</code><br>
+                    Leave blank to allow all IPs. <strong style="color:var(--yellow);">Always include your own IP before enabling.</strong>
+                </div>
+            </div>
+
+            <!-- LOCKED IPs -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">🔐 LOCKED IPs</span>
+                    <span class="chip {% if locks %}chip-red{% endif %}">{{ locks|length }}</span>
+                </div>
+
+                {% if locks %}
+                <div class="lock-list">
+                    {% for lock in locks %}
+                    <div class="lock-item">
+                        <div>
+                            <div class="lock-ip">{{ lock.ip }}</div>
+                            <div class="lock-meta">
+                                {{ lock.attempts }} attempt(s) &nbsp;·&nbsp;
+                                {% if lock.locked_until %}
+                                locked until {{ lock.locked_until }} UTC
+                                {% else %}
+                                not locked
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="lock-right">
+                            <span class="lock-count">{{ lock.attempts }}×</span>
+                            <form method="post" action="{{ url_for('unlock_ip', ip_addr=lock.ip) }}">
+                                <button class="btn btn-green btn-sm" type="submit">UNLOCK</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty">// No locked IPs</div>
+                {% endif %}
+            </div>
+
+        </div>
+
+        <!-- RIGHT: Audit Log -->
+        <div class="panel" style="height:fit-content;">
+            <div class="panel-header">
+                <span class="panel-title">📋 LOGIN AUDIT LOG</span>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <span class="chip">{{ total }} entries</span>
+                    <form method="post" action="{{ url_for('clear_audit') }}"
+                          onsubmit="return confirm('Clear the entire audit log?')">
+                        <button class="btn btn-danger btn-sm" type="submit">CLEAR</button>
+                    </form>
+                </div>
+            </div>
+
+            {% if audit %}
+            <div class="table-shell">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>Username</th>
+                            <th>Result</th>
+                            <th>Reason</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in audit %}
+                        <tr>
+                            <td class="ip-cell">{{ entry.ip }}</td>
+                            <td class="user-cell">{{ entry.username }}</td>
+                            <td>
+                                {% if entry.success %}
+                                <span class="ok-badge ok-yes">SUCCESS</span>
+                                {% else %}
+                                <span class="ok-badge ok-no">FAILED</span>
+                                {% endif %}
+                            </td>
+                            <td class="reason-cell">{{ entry.reason or '—' }}</td>
+                            <td class="time-cell">
+                                <span class="rel-time" data-ts="{{ entry.created_at }}" title="{{ entry.created_at }}">
+                                    {{ entry.created_at }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if total_pages > 1 %}
+            <div class="pagination">
+                <a class="page-btn {% if page<=1 %}disabled{% endif %}" href="{{ url_for('security_page', page=page-1) }}">← PREV</a>
+                {% for p in range(1, total_pages+1) %}
+                <a class="page-btn {% if p==page %}active{% endif %}" href="{{ url_for('security_page', page=p) }}">{{ p }}</a>
+                {% endfor %}
+                <a class="page-btn {% if page>=total_pages %}disabled{% endif %}" href="{{ url_for('security_page', page=page+1) }}">NEXT →</a>
+            </div>
+            <div class="page-info">Showing {{ ((page-1)*50)+1 }}–{{ [page*50, total]|min }} of {{ total }}</div>
+            {% endif %}
+
+            {% else %}
+            <div class="empty">// No login attempts recorded yet</div>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+function showToast(msg,isErr=false){
+    const t=document.getElementById('toast');
+    t.innerText=msg;t.className='toast'+(isErr?' err':'');t.style.display='block';
+    clearTimeout(window._tt);window._tt=setTimeout(()=>{t.style.display='none';},4000);
+}
+
+// Relative times
+function relTime(tsStr){
+    const clean=tsStr.replace(' UTC','').replace(' ','T')+'Z';
+    const d=new Date(clean);
+    if(isNaN(d))return tsStr;
+    const secs=Math.floor((Date.now()-d)/1000);
+    if(secs<60)return 'just now';
+    if(secs<3600)return Math.floor(secs/60)+'m ago';
+    if(secs<86400)return Math.floor(secs/3600)+'h ago';
+    if(secs<604800)return Math.floor(secs/86400)+'d ago';
+    return d.toLocaleDateString();
+}
+document.querySelectorAll('.rel-time[data-ts]').forEach(el=>{
+    el.innerText=relTime(el.dataset.ts);
+});
+
+{% with messages = get_flashed_messages() %}
+{% if messages %}
+window.addEventListener('DOMContentLoaded',()=>{
+    const msg={{ messages[0]|tojson }};
+    const isErr=msg.toLowerCase().includes('error');
+    showToast(msg,isErr);
+});
+{% endif %}
+{% endwith %}
+</script>
+</body>
+</html>

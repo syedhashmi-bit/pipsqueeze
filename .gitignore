@@ -1,0 +1,23 @@
+# Secrets & credentials
+.env
+vpn_dashboard.db
+
+# Private keys & generated client files
+clients/
+qr_codes/
+keys/
+*.conf
+*.png
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs & temp
+*.log
+/tmp
+
+# Claude Code internal
+.claude/
