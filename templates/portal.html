@@ -125,11 +125,20 @@
             <div class="info-row">
                 <span class="info-key">ACCESS MODE</span>
                 {% if client.access_mode == 'lan' %}
-                <span class="info-val" style="color:var(--yellow);">LAN ONLY (192.168.88.0/24)</span>
+                <span class="info-val" style="color:var(--yellow);">LAN ONLY</span>
                 {% elif client.access_mode == 'full' %}
-                <span class="info-val info-val-green">FULL ACCESS (INTERNET + LAN)</span>
+                <span class="info-val info-val-green">FULL ACCESS</span>
                 {% else %}
-                <span class="info-val">INTERNET ONLY (0.0.0.0/0)</span>
+                <span class="info-val">INTERNET ONLY</span>
+                {% endif %}
+            </div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:0 0 10px 0;">
+                {% if client.access_mode == 'lan' %}
+                // Routes only home network traffic (192.168.88.0/24) through VPN — your internet goes direct
+                {% elif client.access_mode == 'full' %}
+                // Routes all traffic through VPN — internet + full access to home network
+                {% else %}
+                // Routes all internet traffic through VPN — your public IP will appear as the server's IP
                 {% endif %}
             </div>
         </div>

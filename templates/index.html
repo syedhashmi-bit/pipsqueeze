@@ -512,7 +512,7 @@
                     <form method="post" action="{{ url_for('bulk_action') }}" id="bulkForm" style="display:flex;gap:7px;flex-wrap:wrap;">
                         <button class="btn btn-green btn-sm" type="submit" name="bulk_action" value="enable">ENABLE</button>
                         <button class="btn btn-yellow btn-sm" type="submit" name="bulk_action" value="disable">DISABLE</button>
-                        <button class="btn btn-danger btn-sm" type="submit" name="bulk_action" value="delete" onclick="return confirm('Delete all selected?')">DELETE</button>
+                        <button class="btn btn-danger btn-sm" type="button" onclick="openBulkDeleteModal()">DELETE</button>
                     </form>
                 </div>
 
@@ -752,6 +752,18 @@
     </div>
 </div>
 
+<div class="modal-bg" id="bulkDeleteModal">
+    <div class="modal">
+        <button class="modal-close" onclick="closeModal('bulkDeleteModal')">✕</button>
+        <div class="modal-title" style="color:var(--red);">⚠ CONFIRM BULK DELETE</div>
+        <div id="bulkDeleteMsg" style="font-family:var(--mono);font-size:13px;color:var(--muted);margin-bottom:20px;"></div>
+        <div style="display:flex;gap:10px;">
+            <button class="btn btn-danger" style="flex:1;" onclick="submitBulkDelete()"><div class="fill"></div><span>DELETE →</span></button>
+            <button class="btn btn-yellow" style="flex:1;" onclick="closeModal('bulkDeleteModal')">CANCEL</button>
+        </div>
+    </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script>
@@ -865,6 +877,26 @@ function closeModal(id){document.getElementById(id).classList.remove('open');}
 document.querySelectorAll('.modal-bg').forEach(m=>{
     m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});
 });
+
+// ── BULK DELETE MODAL ──
+function openBulkDeleteModal(){
+    const checked=document.querySelectorAll('.row-check:checked');
+    if(checked.length===0)return;
+    const names=Array.from(checked).map(c=>c.dataset.name);
+    const msg=document.getElementById('bulkDeleteMsg');
+    msg.innerHTML='This will permanently delete <span style="color:var(--cyan);font-weight:700;">'+names.length+' client'+(names.length>1?'s':'')+'</span>:<br><br>'
+        +'<span style="color:var(--text);">'+names.join(', ')+'</span><br><br>'
+        +'<span style="color:var(--red);">Peers will be removed from MikroTik. This cannot be undone.</span>';
+    openModal('bulkDeleteModal');
+}
+function submitBulkDelete(){
+    const form=document.getElementById('bulkForm');
+    const btn=document.createElement('input');
+    btn.type='hidden';btn.name='bulk_action';btn.value='delete';
+    form.appendChild(btn);
+    closeModal('bulkDeleteModal');
+    form.submit();
+}
 
 // ── BULK SELECT ──
 function toggleSelectAll(cb){
