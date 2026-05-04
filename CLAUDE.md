@@ -34,6 +34,13 @@ python app.py                                      # run locally for testing
 pip install <package>                              # install inside venv
 ```
 
+## Git
+
+```bash
+git remote                                         # origin → git@github.com:syedhashmi-bit/vpn-dashboard.git
+git push                                           # push to main (SSH key at ~/.ssh/id_ed25519)
+```
+
 ## Stack
 
 - **Backend**: Python 3.12, Flask, SQLite (`vpn_dashboard.db`)
