@@ -15,10 +15,13 @@ A self-hosted WireGuard VPN management dashboard. Manages peers directly on a Mi
 ## Screenshots
 
 ### Login Page
-<img width="550" height="736" alt="Login" src="https://github.com/user-attachments/assets/f4fbc194-6229-49e3-b89e-056aa9284c2d" />
+<img width="1012" height="1035" alt="Screenshot 2026-05-04 115128" src="https://github.com/user-attachments/assets/fc31140b-f2b5-4ba0-a3b9-ddc08f1469eb" />
 
 ### Dashboard
-<img width="1234" height="973" alt="Dashboard" src="https://github.com/user-attachments/assets/edd6e56c-6ec1-4225-beac-a8c4384b3a93" />
+<img width="962" height="1250" alt="Screenshot 2026-05-04 115218" src="https://github.com/user-attachments/assets/d773d671-a36c-4a26-b170-c232fe97b84f" />
+
+### Wireguard PEERS
+<img width="996" height="321" alt="Screenshot 2026-05-04 115301" src="https://github.com/user-attachments/assets/af27bbb9-36d3-4c60-b52c-390234521752" />
 
 ### QR Code Generation
 <img width="711" height="1023" alt="QR Code" src="https://github.com/user-attachments/assets/ed99bd4d-655c-4af3-bd9a-a02ad7c78b57" />
