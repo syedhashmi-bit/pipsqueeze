@@ -21,3 +21,6 @@ __pycache__/
 
 # Claude Code internal
 .claude/
+
+# IDE
+.vscode/

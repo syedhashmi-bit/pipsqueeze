@@ -1,5 +1,10 @@
 # CLAUDE.md
 
+## Session Start
+
+Always read CONTEXT.md and MEMORY.md at the start of every session 
+before making any changes
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What This Project Is
