@@ -34,9 +34,6 @@
         /* MAP */
         #map{flex:1;z-index:1;}
 
-        /* Override Leaflet tiles to dark */
-        .leaflet-tile{filter:brightness(0.35) saturate(0.5) hue-rotate(180deg);}
-
         /* SIDEBAR */
         .sidebar{position:absolute;top:70px;right:16px;z-index:900;width:280px;max-height:calc(100vh - 100px);overflow-y:auto;display:flex;flex-direction:column;gap:10px;}
         .sidebar::-webkit-scrollbar{width:4px;}
@@ -44,7 +41,6 @@
 
         .client-card{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:14px;cursor:pointer;transition:border-color .2s,transform .15s;}
         .client-card:hover{border-color:rgba(0,200,255,0.3);transform:translateX(-2px);}
-        .client-card.no-loc{opacity:.5;cursor:default;}
         .card-name{font-size:14px;font-weight:700;color:#fff;margin-bottom:4px;}
         .card-loc{font-family:var(--mono);font-size:11px;color:var(--muted-mid);margin-bottom:6px;}
         .card-row{display:flex;gap:8px;flex-wrap:wrap;}
@@ -53,7 +49,6 @@
         .badge-red{background:rgba(255,64,96,0.1);color:var(--red);border:1px solid rgba(255,64,96,0.2);}
         .badge-cyan{background:var(--cyan-dim);color:var(--cyan);border:1px solid rgba(0,200,255,0.15);}
         .badge-yellow{background:rgba(255,201,64,0.1);color:var(--yellow);border:1px solid rgba(255,201,64,0.2);}
-        .badge-muted{background:rgba(61,96,112,0.15);color:var(--muted-mid);border:1px solid rgba(61,96,112,0.2);}
 
         /* POPUP */
         .leaflet-popup-content-wrapper{background:#080f18!important;border:1px solid rgba(0,200,255,0.25)!important;border-radius:5px!important;box-shadow:0 8px 32px rgba(0,0,0,0.6)!important;color:var(--text)!important;font-family:var(--display)!important;}
@@ -65,6 +60,11 @@
         .pop-val-green{color:var(--green);}
         .pop-val-red{color:var(--red);}
         .pop-val-yellow{color:var(--yellow);}
+
+        /* LEGEND */
+        .map-legend{position:absolute;bottom:28px;left:16px;z-index:900;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:12px 16px;font-family:var(--mono);font-size:11px;color:var(--muted-mid);display:flex;flex-direction:column;gap:7px;}
+        .legend-row{display:flex;align-items:center;gap:8px;}
+        .legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
 
         /* NO CLIENTS */
         .no-clients{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:900;pointer-events:none;}
@@ -96,7 +96,7 @@
 {% if not clients %}
 <div class="no-clients">
     <div class="no-clients-icon">📍</div>
-    <div class="no-clients-title">NO LOCATIONS SET</div>
+    <div class="no-clients-title">NO CLIENT LOCATIONS SET</div>
     <div class="no-clients-sub">// Add latitude and longitude to clients via the Edit (⚙) button on the dashboard to see them here.</div>
 </div>
 {% endif %}
@@ -126,100 +126,124 @@
 </div>
 {% endif %}
 
+<!-- LEGEND -->
+<div class="map-legend">
+    <div class="legend-row"><div class="legend-dot" style="background:#00c8ff;box-shadow:0 0 6px #00c8ff88;"></div>VPN Server</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#00ff9d;box-shadow:0 0 6px #00ff9d88;"></div>Client Online</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#ffc940;box-shadow:0 0 6px #ffc94088;"></div>Client Unreachable</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#ff4060;box-shadow:0 0 6px #ff406088;"></div>Client Disabled</div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const clientData = {{ clients_json|safe }};
 
+// Server location (Hetzner Nuremberg)
+const SERVER_LAT = 49.4521;
+const SERVER_LON = 11.0767;
+
 // Init map
 const map = L.map('map', {
-    center: [20, 0],
-    zoom: 2,
+    center: [SERVER_LAT, SERVER_LON],
+    zoom: 4,
     zoomControl: true,
     attributionControl: false
 });
 
-// Dark tile layer
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18,
-    opacity: 1
+// CartoDB Dark Matter tiles — natively dark, no CSS filter needed
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '©OpenStreetMap ©CartoDB',
+    subdomains: 'abcd',
+    maxZoom: 19
 }).addTo(map);
 
 // Custom marker icon factory
-function makeIcon(color, size=14){
+function makeIcon(color, size){
+    size = size || 14;
     return L.divIcon({
         className: '',
-        html: `<div style="
-            width:${size}px;height:${size}px;border-radius:50%;
-            background:${color};
-            box-shadow:0 0 ${size}px ${color}, 0 0 ${size*2}px ${color}55;
-            border:2px solid rgba(255,255,255,0.3);
-            cursor:pointer;
-        "></div>`,
-        iconSize: [size,size],
-        iconAnchor: [size/2,size/2],
-        popupAnchor: [0,-(size/2+4)]
+        html: '<div style="'
+            + 'width:' + size + 'px;height:' + size + 'px;border-radius:50%;'
+            + 'background:' + color + ';'
+            + 'box-shadow:0 0 ' + size + 'px ' + color + ',0 0 ' + (size*2) + 'px ' + color + '55;'
+            + 'border:2px solid rgba(255,255,255,0.3);'
+            + 'cursor:pointer;'
+            + '"></div>',
+        iconSize: [size, size],
+        iconAnchor: [size/2, size/2],
+        popupAnchor: [0, -(size/2+4)]
     });
 }
 
-const markers = {};
+// VPN SERVER PIN (cyan, larger)
+const serverMarker = L.marker([SERVER_LAT, SERVER_LON], {icon: makeIcon('#00c8ff', 22)});
+serverMarker.bindPopup(
+    '<div class="pop-name" style="color:#00c8ff;">⬡ PIPSQUEEZE SERVER</div>'
+    + '<div class="pop-row"><span>Location</span><span class="pop-val">Nuremberg, Germany</span></div>'
+    + '<div class="pop-row"><span>Provider</span><span class="pop-val">Hetzner</span></div>'
+);
+serverMarker.addTo(map);
 
-clientData.forEach(c => {
+// CLIENT PINS
+const markers = {};
+const allCoords = [[SERVER_LAT, SERVER_LON]];
+
+clientData.forEach(function(c){
     if(c.lat === null || c.lon === null) return;
 
-    // Pick colour: green=enabled+reachable, yellow=enabled+unreachable, red=disabled, grey=unknown
-    let color = '#6a8ea0';
+    var color = '#6a8ea0';
     if(c.disabled) color = '#ff4060';
     else if(c.reachable) color = '#00ff9d';
     else color = '#ffc940';
 
-    const marker = L.marker([c.lat, c.lon], {icon: makeIcon(color, 16)});
+    var marker = L.marker([c.lat, c.lon], {icon: makeIcon(color, 16)});
 
-    const pingStr = c.ping_ms !== null ? `${parseFloat(c.ping_ms).toFixed(1)}ms` : 'N/A';
-    const uptimeStr = c.uptime !== null ? `${c.uptime}%` : 'N/A';
-    const pingColor = c.reachable ? 'pop-val-green' : 'pop-val-red';
-    const uptimeColor = c.uptime >= 90 ? 'pop-val-green' : c.uptime >= 70 ? 'pop-val-yellow' : 'pop-val-red';
+    var pingStr   = c.ping_ms !== null ? parseFloat(c.ping_ms).toFixed(1) + 'ms' : 'N/A';
+    var uptimeStr = c.uptime  !== null ? c.uptime + '%' : 'N/A';
+    var pingClass   = c.reachable ? 'pop-val-green' : 'pop-val-red';
+    var uptimeClass = c.uptime >= 90 ? 'pop-val-green' : c.uptime >= 70 ? 'pop-val-yellow' : 'pop-val-red';
 
-    marker.bindPopup(`
-        <div class="pop-name">${c.name}</div>
-        ${c.location ? `<div style="font-family:var(--mono);font-size:11px;color:#4a6070;margin-bottom:10px;">📍 ${c.location}</div>` : ''}
-        <div class="pop-row"><span>IP</span><span class="pop-val" style="color:#00c8ff;">${c.ip}</span></div>
-        <div class="pop-row"><span>Status</span><span class="${c.disabled ? 'pop-val-red' : 'pop-val-green'}">${c.disabled ? 'DISABLED' : 'ENABLED'}</span></div>
-        <div class="pop-row"><span>Latency</span><span class="${pingColor}">${pingStr}</span></div>
-        <div class="pop-row"><span>Uptime 7d</span><span class="${uptimeColor}">${uptimeStr}</span></div>
-        <div class="pop-row"><span>RX / TX</span><span class="pop-val">${c.total_rx} / ${c.total_tx}</span></div>
-        ${c.last_seen ? `<div class="pop-row"><span>Last Seen</span><span class="pop-val" style="font-size:11px;">${c.last_seen}</span></div>` : ''}
-    `);
+    marker.bindPopup(
+        '<div class="pop-name">' + c.name + '</div>'
+        + (c.location ? '<div style="font-family:var(--mono);font-size:11px;color:#4a6070;margin-bottom:10px;">📍 ' + c.location + '</div>' : '')
+        + '<div class="pop-row"><span>IP</span><span class="pop-val" style="color:#00c8ff;">' + c.ip + '</span></div>'
+        + '<div class="pop-row"><span>Status</span><span class="' + (c.disabled ? 'pop-val-red' : 'pop-val-green') + '">' + (c.disabled ? 'DISABLED' : 'ENABLED') + '</span></div>'
+        + '<div class="pop-row"><span>Latency</span><span class="' + pingClass + '">' + pingStr + '</span></div>'
+        + '<div class="pop-row"><span>Uptime 7d</span><span class="' + uptimeClass + '">' + uptimeStr + '</span></div>'
+        + '<div class="pop-row"><span>RX / TX</span><span class="pop-val">' + c.total_rx + ' / ' + c.total_tx + '</span></div>'
+        + (c.last_seen ? '<div class="pop-row"><span>Last Seen</span><span class="pop-val" style="font-size:11px;">' + c.last_seen + '</span></div>' : '')
+    );
 
     marker.addTo(map);
     markers[c.name] = marker;
+    allCoords.push([c.lat, c.lon]);
 });
 
-// Fit map to all markers if any
-if(clientData.length > 0){
-    const coords = clientData.filter(c=>c.lat&&c.lon).map(c=>[c.lat,c.lon]);
-    if(coords.length > 0){
-        if(coords.length === 1){
-            map.setView(coords[0], 6);
-        } else {
-            map.fitBounds(coords, {padding:[40,40]});
-        }
-    }
+// Fit bounds to server + all client pins
+if(allCoords.length === 1){
+    // No clients with coords — centre on server
+    map.setView([SERVER_LAT, SERVER_LON], 4);
+} else if(allCoords.length === 2){
+    map.setView(allCoords[1], 6);
+} else {
+    map.fitBounds(allCoords, {padding: [50, 50]});
 }
 
 // Fly to client from sidebar
 function flyTo(lat, lon, name){
     map.flyTo([lat, lon], 8, {duration: 1.2});
-    setTimeout(()=>{
+    setTimeout(function(){
         if(markers[name]) markers[name].openPopup();
     }, 1300);
 }
 
-// Pulse animation for online markers (runs every 3s)
-setInterval(()=>{
-    document.querySelectorAll('.leaflet-marker-icon div').forEach(el=>{
-        if(el.style.background === '#00ff9d' || el.style.background === 'rgb(0, 255, 157)'){
+// Subtle pulse for online client markers
+setInterval(function(){
+    document.querySelectorAll('.leaflet-marker-icon div').forEach(function(el){
+        var bg = el.style.background;
+        if(bg === '#00ff9d' || bg === 'rgb(0, 255, 157)'){
             el.style.transform = 'scale(1.3)';
-            setTimeout(()=>{ el.style.transform = 'scale(1)'; }, 300);
+            setTimeout(function(){ el.style.transform = 'scale(1)'; }, 300);
         }
     });
 }, 3000);

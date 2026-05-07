@@ -379,12 +379,12 @@
                 <a href="{{ url_for('provision_manage') }}">
                     <button class="btn btn-ghost" type="button">🔗 PROVISION</button>
                 </a>
-                {% if session.get('role') == 'admin' %}
+                {% if session.get('role', 'admin') == 'admin' %}
                 <a href="{{ url_for('admin_users_page') }}">
                     <button class="btn btn-ghost" type="button">👥 USERS</button>
                 </a>
                 {% endif %}
-                {% if session.get('role') == 'admin' %}
+                {% if session.get('role', 'admin') == 'admin' %}
                 <form method="post" action="{{ url_for('reset_db') }}" onsubmit="return confirm('Wipe all records?');">
                     <button class="btn btn-danger" type="submit">RESET DB</button>
                 </form>
@@ -471,7 +471,7 @@
         <!-- LEFT -->
         <div>
 
-            {% if session.get('role') == 'admin' %}
+            {% if session.get('role', 'admin') == 'admin' %}
             <!-- CREATE CLIENT -->
             <div class="panel">
                 <div class="panel-header">
@@ -582,7 +582,7 @@
                 <div class="bulk-bar" id="bulkBar">
                     <span class="bulk-count" id="bulkCount">0 selected</span>
                     <form method="post" action="{{ url_for('bulk_action') }}" id="bulkForm" style="display:flex;gap:7px;flex-wrap:wrap;">
-                        {% if session.get('role') == 'admin' %}
+                        {% if session.get('role', 'admin') == 'admin' %}
                         <button class="btn btn-green btn-sm" type="submit" name="bulk_action" value="enable">ENABLE</button>
                         <button class="btn btn-yellow btn-sm" type="submit" name="bulk_action" value="disable">DISABLE</button>
                         <button class="btn btn-danger btn-sm" type="button" onclick="openBulkDeleteModal()">DELETE</button>
@@ -665,7 +665,7 @@
                                         <form method="post" action="{{ url_for('regen_client', client=c.name) }}" onsubmit="return confirm('Regenerate keys for {{ c.name }}?')">
                                             <button class="btn btn-yellow btn-sm" type="submit" title="Regenerate keys">↻</button>
                                         </form>
-                                        {% if session.get('role') == 'admin' %}
+                                        {% if session.get('role', 'admin') == 'admin' %}
                                         <form method="post" action="{{ url_for('delete_client', client=c.name) }}" onsubmit="return confirm('Delete {{ c.name }}?')">
                                             <button class="btn btn-danger btn-sm" type="submit" title="Delete">✕</button>
                                         </form>

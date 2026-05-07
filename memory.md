@@ -94,6 +94,9 @@ This file tracks what has been built, what was fixed, and important decisions ma
 | `psutil` missing on VPS after app.py update | `pip install psutil` inside venv |
 | MikroTik "not enough permissions" on wireguard page | Router API user needed `read+write+api` policy group on MikroTik |
 | `@anthropic/claude-code` 404 on npm | Correct package name is `@anthropic-ai/claude-code` |
+| Create Client form missing from dashboard | `session.get('role') == 'admin'` returned False for stale pre-multi-user sessions; fixed by defaulting to 'admin' via `session.get('role', 'admin') == 'admin'` — users must re-login to get role in session |
+| Map page split dark/white, tiles not dark | Replaced OSM + CSS filter with CartoDB Dark Matter tiles natively; removed `.leaflet-tile` filter rule |
+| Map missing server pin and legend | Added fixed VPN server pin at Nuremberg (49.4521, 11.0767) with cyan glow; added 4-item legend bottom-left; bounds now include server + all client pins |
 
 ---
 
