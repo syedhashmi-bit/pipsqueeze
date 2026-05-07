@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PipSqueeze — Admin Users</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="/static/logo.png">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#00c8ff">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="PipSqueeze">
+    <style>
+        :root{--bg:#030508;--surface:#060c13;--panel:rgba(6,14,24,0.93);--border:rgba(0,200,255,0.1);--border-lit:rgba(0,200,255,0.4);--cyan:#00c8ff;--cyan-dim:rgba(0,200,255,0.07);--green:#00ff9d;--green-dim:rgba(0,255,157,0.07);--red:#ff4060;--red-dim:rgba(255,64,96,0.09);--yellow:#ffc940;--yellow-dim:rgba(255,201,64,0.09);--text:#c8e0ee;--muted:#3d6070;--muted-mid:#6a8ea0;--mono:'Share Tech Mono',monospace;--display:'Rajdhani',sans-serif;}
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:var(--display);background:var(--bg);color:var(--text);min-height:100vh;padding:28px 32px;}
+        .bg-layer{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+        .grid-overlay{position:absolute;inset:0;background-image:linear-gradient(rgba(0,200,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,0.04) 1px,transparent 1px);background-size:44px 44px;animation:gridMove 20s linear infinite;}
+        @keyframes gridMove{to{background-position:44px 44px;}}
+        .scanlines{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.12) 3px,rgba(0,0,0,0.12) 4px);}
+        .gs{position:absolute;border-radius:50%;filter:blur(140px);}
+        .gs1{width:900px;height:900px;background:#001830;top:-350px;left:-300px;opacity:.5;}
+        .gs2{width:600px;height:600px;background:#001020;bottom:-200px;right:-200px;opacity:.4;}
+        .page{max-width:900px;margin:auto;position:relative;z-index:1;}
+        .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;padding-bottom:18px;border-bottom:1px solid var(--border);}
+        .brand{display:flex;align-items:center;gap:12px;}
+        .brand img{width:36px;height:36px;border-radius:6px;}
+        .brand-label{font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--cyan);opacity:.7;}
+        h1{font-size:24px;font-weight:700;letter-spacing:.05em;}
+        .nav{display:flex;gap:8px;}
+        .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 15px;border-radius:3px;font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.06em;cursor:pointer;text-decoration:none;transition:all .2s;white-space:nowrap;border:none;}
+        .btn-ghost{background:var(--cyan-dim);border:1px solid var(--border-lit);color:var(--cyan);}
+        .btn-ghost:hover{background:rgba(0,200,255,0.12);}
+        .btn-green{background:var(--green-dim);border:1px solid rgba(0,255,157,0.3);color:var(--green);}
+        .btn-green:hover{background:rgba(0,255,157,0.14);}
+        .btn-danger{background:var(--red-dim);border:1px solid rgba(255,64,96,0.3);color:var(--red);}
+        .btn-danger:hover{background:rgba(255,64,96,0.14);}
+        .btn-sm{padding:5px 10px;font-size:12px;}
+        .panel{background:var(--panel);border:1px solid var(--border);border-radius:6px;margin-bottom:24px;overflow:hidden;}
+        .panel-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+        .panel-title{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--cyan);}
+        table{width:100%;border-collapse:collapse;}
+        th{font-family:var(--mono);font-size:10px;letter-spacing:.15em;color:var(--muted);padding:10px 16px;text-align:left;border-bottom:1px solid var(--border);}
+        td{padding:12px 16px;border-bottom:1px solid rgba(0,200,255,0.05);font-size:14px;}
+        tr:last-child td{border-bottom:none;}
+        tr:hover td{background:rgba(0,200,255,0.02);}
+        .badge{display:inline-block;padding:2px 9px;border-radius:2px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;}
+        .badge-admin{background:var(--cyan-dim);color:var(--cyan);border:1px solid rgba(0,200,255,0.2);}
+        .badge-viewer{background:var(--yellow-dim);color:var(--yellow);border:1px solid rgba(255,201,64,0.2);}
+        .badge-you{background:var(--green-dim);color:var(--green);border:1px solid rgba(0,255,157,0.2);margin-left:6px;}
+        .td-actions{display:flex;gap:6px;flex-wrap:wrap;}
+        .flash{padding:12px 16px;border-radius:3px;font-family:var(--mono);font-size:12px;margin-bottom:18px;}
+        .flash.ok{background:var(--green-dim);border:1px solid rgba(0,255,157,0.2);color:var(--green);}
+        .flash.err{background:var(--red-dim);border:1px solid rgba(255,64,96,0.2);color:var(--red);}
+        .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:none;align-items:center;justify-content:center;}
+        .modal-bg.open{display:flex;}
+        .modal{background:#060c13;border:1px solid var(--border-lit);border-radius:6px;padding:28px 26px;width:100%;max-width:420px;}
+        .modal h2{font-size:16px;font-weight:700;color:var(--cyan);margin-bottom:20px;font-family:var(--mono);letter-spacing:.1em;}
+        .field{margin-bottom:14px;}
+        .field label{display:block;font-family:var(--mono);font-size:11px;color:var(--muted-mid);margin-bottom:5px;letter-spacing:.1em;}
+        .field input,.field select{width:100%;background:#040a10;border:1px solid var(--border);border-radius:3px;padding:9px 11px;color:var(--text);font-family:var(--mono);font-size:13px;}
+        .field input:focus,.field select:focus{outline:none;border-color:var(--border-lit);}
+        .modal-actions{display:flex;gap:10px;margin-top:20px;}
+        .modal-actions .btn{flex:1;justify-content:center;}
+    </style>
+</head>
+<body>
+<div class="bg-layer">
+    <div class="grid-overlay"></div><div class="scanlines"></div>
+    <div class="gs gs1"></div><div class="gs gs2"></div>
+</div>
+<div class="page">
+    <div class="topbar">
+        <div class="brand">
+            <a href="{{ url_for('home') }}"><img src="/static/logo.png" alt="logo"></a>
+            <div>
+                <div class="brand-label">PIPSQUEEZE // ADMIN</div>
+                <h1>USER MANAGEMENT</h1>
+            </div>
+        </div>
+        <div class="nav">
+            <a href="{{ url_for('home') }}" class="btn btn-ghost">← DASHBOARD</a>
+            <button class="btn btn-green" onclick="document.getElementById('addModal').classList.add('open')">+ ADD USER</button>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    {% for m in messages %}
+    <div class="flash ok">{{ m }}</div>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">ADMIN USERS ({{ users|length }})</span>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>USERNAME</th>
+                    <th>ROLE</th>
+                    <th>CREATED</th>
+                    <th>ACTIONS</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for u in users %}
+            <tr>
+                <td>
+                    <span style="font-family:var(--mono);font-size:13px;">{{ u.username }}</span>
+                    {% if u.username == current_user %}<span class="badge badge-you">YOU</span>{% endif %}
+                </td>
+                <td>
+                    <span class="badge {% if u.role == 'admin' %}badge-admin{% else %}badge-viewer{% endif %}">{{ u.role|upper }}</span>
+                </td>
+                <td style="font-family:var(--mono);font-size:12px;color:var(--muted-mid);">{{ u.created_at[:10] }}</td>
+                <td>
+                    <div class="td-actions">
+                        <button class="btn btn-ghost btn-sm" onclick="openPwModal({{ u.id }}, '{{ u.username }}')">CHANGE PW</button>
+                        {% if u.username != current_user %}
+                        <form method="post" action="{{ url_for('admin_users_change_role', uid=u.id) }}" style="display:inline;">
+                            <input type="hidden" name="role" value="{% if u.role == 'admin' %}viewer{% else %}admin{% endif %}">
+                            <button class="btn btn-ghost btn-sm" type="submit">→ {% if u.role == 'admin' %}VIEWER{% else %}ADMIN{% endif %}</button>
+                        </form>
+                        <form method="post" action="{{ url_for('admin_users_delete', uid=u.id) }}" style="display:inline;" onsubmit="return confirm('Delete user {{ u.username }}?');">
+                            <button class="btn btn-danger btn-sm" type="submit">DELETE</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add User Modal -->
+<div class="modal-bg" id="addModal">
+    <div class="modal">
+        <h2>ADD USER</h2>
+        <form method="post" action="{{ url_for('admin_users_add') }}">
+            <div class="field">
+                <label>USERNAME</label>
+                <input type="text" name="username" required autocomplete="off">
+            </div>
+            <div class="field">
+                <label>PASSWORD</label>
+                <input type="password" name="password" required autocomplete="new-password">
+            </div>
+            <div class="field">
+                <label>ROLE</label>
+                <select name="role">
+                    <option value="viewer">Viewer (read-only)</option>
+                    <option value="admin">Admin (full access)</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-green" type="submit">CREATE</button>
+                <button class="btn btn-ghost" type="button" onclick="document.getElementById('addModal').classList.remove('open')">CANCEL</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Change Password Modal -->
+<div class="modal-bg" id="pwModal">
+    <div class="modal">
+        <h2 id="pwModalTitle">CHANGE PASSWORD</h2>
+        <form method="post" id="pwForm">
+            <div class="field">
+                <label>NEW PASSWORD</label>
+                <input type="password" name="new_password" required autocomplete="new-password" id="pwInput">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-green" type="submit">UPDATE</button>
+                <button class="btn btn-ghost" type="button" onclick="document.getElementById('pwModal').classList.remove('open')">CANCEL</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openPwModal(uid, username) {
+    document.getElementById('pwModalTitle').textContent = 'CHANGE PASSWORD — ' + username.toUpperCase();
+    document.getElementById('pwForm').action = '/admin/users/change-password/' + uid;
+    document.getElementById('pwInput').value = '';
+    document.getElementById('pwModal').classList.add('open');
+}
+document.querySelectorAll('.modal-bg').forEach(bg => {
+    bg.addEventListener('click', e => { if(e.target === bg) bg.classList.remove('open'); });
+});
+</script>
+</body>
+</html>

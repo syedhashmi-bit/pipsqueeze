@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 import subprocess, os, re, sqlite3, qrcode, pyotp, shutil
 import secrets, zipfile, threading, time, psutil, csv, io, json
+from werkzeug.security import generate_password_hash, check_password_hash
 import notifications as notif
 
 load_dotenv()
@@ -63,6 +64,7 @@ def init_db():
             total_rx     INTEGER DEFAULT 0,
             total_tx     INTEGER DEFAULT 0,
             access_mode  TEXT DEFAULT 'internet',
+            quota_mb     INTEGER DEFAULT NULL,
             created_at   TEXT NOT NULL
         )
     """)
@@ -115,26 +117,46 @@ def init_db():
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS notifications (
-            id                INTEGER PRIMARY KEY,
-            discord_enabled   INTEGER DEFAULT 0,
-            discord_webhook   TEXT    DEFAULT '',
-            email_enabled     INTEGER DEFAULT 0,
-            email_host        TEXT    DEFAULT '',
-            email_port        INTEGER DEFAULT 587,
-            email_user        TEXT    DEFAULT '',
-            email_pass        TEXT    DEFAULT '',
-            email_from        TEXT    DEFAULT '',
-            email_to          TEXT    DEFAULT '',
-            email_tls         INTEGER DEFAULT 1,
-            telegram_enabled  INTEGER DEFAULT 0,
-            telegram_token    TEXT    DEFAULT '',
-            telegram_chat_id  TEXT    DEFAULT '',
-            notify_connect    INTEGER DEFAULT 1,
-            notify_disconnect INTEGER DEFAULT 1,
-            notify_expiry     INTEGER DEFAULT 1,
-            notify_new_client INTEGER DEFAULT 1,
-            notify_delete     INTEGER DEFAULT 1,
-            notify_regen      INTEGER DEFAULT 0
+            id                      INTEGER PRIMARY KEY,
+            discord_enabled         INTEGER DEFAULT 0,
+            discord_webhook         TEXT    DEFAULT '',
+            email_enabled           INTEGER DEFAULT 0,
+            email_host              TEXT    DEFAULT '',
+            email_port              INTEGER DEFAULT 587,
+            email_user              TEXT    DEFAULT '',
+            email_pass              TEXT    DEFAULT '',
+            email_from              TEXT    DEFAULT '',
+            email_to                TEXT    DEFAULT '',
+            email_tls               INTEGER DEFAULT 1,
+            telegram_enabled        INTEGER DEFAULT 0,
+            telegram_token          TEXT    DEFAULT '',
+            telegram_chat_id        TEXT    DEFAULT '',
+            notify_connect          INTEGER DEFAULT 1,
+            notify_disconnect       INTEGER DEFAULT 1,
+            notify_expiry           INTEGER DEFAULT 1,
+            notify_new_client       INTEGER DEFAULT 1,
+            notify_delete           INTEGER DEFAULT 1,
+            notify_regen            INTEGER DEFAULT 0,
+            notify_quota            INTEGER DEFAULT 1,
+            notify_expiry_reminder  INTEGER DEFAULT 1,
+            notify_login_failure    INTEGER DEFAULT 0,
+            notify_login_locked     INTEGER DEFAULT 1,
+            notify_provision        INTEGER DEFAULT 1
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS provision_tokens (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            token       TEXT UNIQUE NOT NULL,
+            label       TEXT DEFAULT '',
+            tags        TEXT DEFAULT '',
+            access_mode TEXT DEFAULT 'internet',
+            quota_mb    INTEGER DEFAULT NULL,
+            expires_at  TEXT DEFAULT NULL,
+            used        INTEGER DEFAULT 0,
+            used_at     TEXT DEFAULT NULL,
+            created_at  TEXT NOT NULL
         )
     """)
 
@@ -159,7 +181,25 @@ def init_db():
         )
     """)
 
-    # Migrate existing DB columns
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS admin_users (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            username     TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            role         TEXT DEFAULT 'viewer',
+            created_at   TEXT NOT NULL
+        )
+    """)
+
+    # Seed default admin from .env (INSERT OR IGNORE is race-safe across workers)
+    default_user = os.getenv("APP_USERNAME", "admin")
+    default_pass = os.getenv("APP_PASSWORD", "changeme")
+    conn.execute(
+        "INSERT OR IGNORE INTO admin_users (username, password_hash, role, created_at) VALUES (?,?,?,?)",
+        (default_user, generate_password_hash(default_pass), "admin", datetime.utcnow().isoformat())
+    )
+
+    # Migrate clients table
     existing = [r[1] for r in conn.execute("PRAGMA table_info(clients)").fetchall()]
     for col, defn in [
         ("notes",        "TEXT DEFAULT ''"),
@@ -174,9 +214,22 @@ def init_db():
         ("total_rx",     "INTEGER DEFAULT 0"),
         ("total_tx",     "INTEGER DEFAULT 0"),
         ("access_mode",  "TEXT DEFAULT 'internet'"),
+        ("quota_mb",     "INTEGER DEFAULT NULL"),
     ]:
         if col not in existing:
             conn.execute(f"ALTER TABLE clients ADD COLUMN {col} {defn}")
+
+    # Migrate notifications table
+    notif_existing = [r[1] for r in conn.execute("PRAGMA table_info(notifications)").fetchall()]
+    for col, defn in [
+        ("notify_quota",           "INTEGER DEFAULT 1"),
+        ("notify_expiry_reminder", "INTEGER DEFAULT 1"),
+        ("notify_login_failure",   "INTEGER DEFAULT 0"),
+        ("notify_login_locked",    "INTEGER DEFAULT 1"),
+        ("notify_provision",       "INTEGER DEFAULT 1"),
+    ]:
+        if col not in notif_existing:
+            conn.execute(f"ALTER TABLE notifications ADD COLUMN {col} {defn}")
 
     conn.commit()
     conn.close()
@@ -283,15 +336,15 @@ def build_allowed_ips(access_mode):
     return "0.0.0.0/0"
 
 
-def add_client(name, ip, notes="", tags="", location="", lat=None, lon=None, expires_at=None, access_mode='internet'):
+def add_client(name, ip, notes="", tags="", location="", lat=None, lon=None, expires_at=None, access_mode='internet', quota_mb=None):
     token = secrets.token_urlsafe(24)
     conn  = get_db_connection()
     conn.execute(
         """INSERT INTO clients
-           (name,ip,notes,tags,location,lat,lon,expires_at,portal_token,access_mode,created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+           (name,ip,notes,tags,location,lat,lon,expires_at,portal_token,access_mode,quota_mb,created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
         (name, ip, notes, tags, location, lat, lon, expires_at,
-         token, access_mode, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
+         token, access_mode, quota_mb, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
     )
     conn.commit()
     conn.close()
@@ -526,20 +579,35 @@ def send_weekly_digest():
 
 _prev_states  = {}
 _prev_traffic = {}
-_last_digest_day = None   # track which weekday we last sent a digest
+_last_digest_day    = None
+_last_reminder_date = None
+_reminded_today     = set()
+_firewall_synced    = False
 
 
 def _monitor_loop():
-    global _last_digest_day
+    global _last_digest_day, _last_reminder_date, _reminded_today, _firewall_synced
     while True:
         try:
             mt = MikroTikAPI()
             mt.connect()
+
+            if not _firewall_synced:
+                try:
+                    conn_fs = get_db_connection()
+                    all_clients = conn_fs.execute("SELECT ip, access_mode FROM clients WHERE disabled=0").fetchall()
+                    conn_fs.close()
+                    mt.sync_firewall_rules([dict(r) for r in all_clients])
+                    _firewall_synced = True
+                except Exception:
+                    pass
+
             peers = mt.get_peers()
             mt.disconnect()
 
             now_str  = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
             today_wd = datetime.utcnow().strftime("%A").lower()
+            today_dt = datetime.utcnow().strftime("%Y-%m-%d")
 
             for peer in peers:
                 name   = peer.get("comment") or ""
@@ -603,6 +671,48 @@ def _monitor_loop():
                 c2.close()
                 add_log(f"Auto-disabled expired client {cname}")
                 notif.send_notification("expiry", f"Client '{cname}' has expired and was automatically disabled.")
+
+            # Bandwidth quota check
+            conn_q = get_db_connection()
+            quota_clients = conn_q.execute(
+                "SELECT name, total_rx, total_tx, quota_mb FROM clients "
+                "WHERE quota_mb IS NOT NULL AND disabled=0"
+            ).fetchall()
+            conn_q.close()
+            for qc in quota_clients:
+                used_mb = (int(qc["total_rx"] or 0) + int(qc["total_tx"] or 0)) / 1048576
+                if used_mb >= qc["quota_mb"]:
+                    try:
+                        mt_q = MikroTikAPI(); mt_q.connect()
+                        mt_q.disable_peer_by_name(qc["name"]); mt_q.disconnect()
+                    except Exception:
+                        pass
+                    cq = get_db_connection()
+                    cq.execute("UPDATE clients SET disabled=1 WHERE name=?", (qc["name"],))
+                    cq.commit(); cq.close()
+                    add_log(f"Auto-disabled {qc['name']} — quota exceeded ({used_mb:.0f}MB / {qc['quota_mb']}MB)")
+                    notif.send_notification("quota",
+                        f"Client '{qc['name']}' has been disabled — data quota of {qc['quota_mb']}MB exceeded "
+                        f"(used {used_mb:.0f}MB).")
+
+            # Expiry reminders (once per day, 3 days before expiry)
+            if today_dt != _last_reminder_date:
+                _last_reminder_date = today_dt
+                _reminded_today.clear()
+                reminder_target = (datetime.utcnow() + timedelta(days=3)).strftime("%Y-%m-%d")
+                conn_r = get_db_connection()
+                remind_clients = conn_r.execute(
+                    "SELECT name, expires_at FROM clients "
+                    "WHERE expires_at=? AND disabled=0",
+                    (reminder_target,)
+                ).fetchall()
+                conn_r.close()
+                for rc in remind_clients:
+                    if rc["name"] not in _reminded_today:
+                        _reminded_today.add(rc["name"])
+                        notif.send_notification("expiry_reminder",
+                            f"Client '{rc['name']}' expires in 3 days ({rc['expires_at']}). "
+                            f"Renew or extend their access from the dashboard.")
 
             # Weekly digest — send on configured day, once per day
             if today_wd == WEEKLY_DIGEST_DAY and _last_digest_day != today_wd:
@@ -719,6 +829,26 @@ def login_required(f):
     return decorated
 
 
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        ip = get_client_ip()
+        if not is_ip_allowed(ip):
+            return render_template("blocked.html", reason="Your IP is not whitelisted.", ip=ip), 403
+        if not session.get("logged_in"):
+            return redirect(url_for("login"))
+        if check_session_timeout():
+            session.clear()
+            flash("Session expired. Please log in again.")
+            return redirect(url_for("login"))
+        if session.get("role") != "admin":
+            flash("Admin access required.")
+            return redirect(url_for("home"))
+        touch_session()
+        return f(*args, **kwargs)
+    return decorated
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     ip = get_client_ip()
@@ -735,26 +865,47 @@ def login():
             user = request.form.get("username", "").strip()
             pw   = request.form.get("password", "")
             code = request.form.get("code", "")
-            if user == USERNAME and pw == PASSWORD:
+            # DB-based user lookup
+            conn_u = get_db_connection()
+            db_user = conn_u.execute(
+                "SELECT * FROM admin_users WHERE username=?", (user,)
+            ).fetchone()
+            conn_u.close()
+            valid_creds = db_user and check_password_hash(db_user["password_hash"], pw)
+            if valid_creds:
                 totp = pyotp.TOTP(TOTP_SECRET)
                 if totp.verify(code):
                     clear_attempts(ip)
                     session["logged_in"]   = True
                     session["last_active"] = datetime.utcnow().isoformat()
                     session["login_ip"]    = ip
+                    session["username"]    = db_user["username"]
+                    session["role"]        = db_user["role"]
                     record_login_audit(ip, user, True)
                     add_log(f"Login from {ip}")
                     return redirect(url_for("home"))
                 record_failed_attempt(ip)
                 record_login_audit(ip, user, False, "Bad 2FA code")
                 error = "Invalid 2FA code."
+                reason = "Bad 2FA code"
             else:
                 record_failed_attempt(ip)
                 record_login_audit(ip, user, False, "Bad credentials")
                 error = "Invalid username or password."
+                reason = "Bad credentials"
             locked, lockout_mins = is_locked_out(ip)
+            # Get current attempt count for notification
+            attempt_row = get_lockout_record(ip)
+            attempt_count = attempt_row["attempts"] if attempt_row else 1
+            notif.send_notification("login_failure",
+                f"Failed login attempt from {ip} "
+                f"(attempt {attempt_count} of {MAX_LOGIN_ATTEMPTS}). "
+                f"Username tried: '{user}'. Reason: {reason}.")
             if locked:
                 error = f"Too many failed attempts. Locked for {lockout_mins} minute(s)."
+                notif.send_notification("login_locked",
+                    f"IP {ip} has been locked out after {MAX_LOGIN_ATTEMPTS} "
+                    f"failed login attempts. Locked for {LOCKOUT_MINUTES} minutes.")
 
     return render_template("login.html", error=error, locked=locked, lockout_mins=lockout_mins)
 
@@ -832,11 +983,19 @@ def home():
         location = request.form.get("location", "").strip()
         lat_str  = request.form.get("lat", "").strip()
         lon_str  = request.form.get("lon", "").strip()
-        expires     = request.form.get("expires_at", "").strip() or None
-        access_mode = request.form.get("access_mode", "internet")
-        allowed_ips = build_allowed_ips(access_mode)
+        expires      = request.form.get("expires_at", "").strip() or None
+        access_mode  = request.form.get("access_mode", "internet")
+        allowed_ips  = build_allowed_ips(access_mode)
         lat = float(lat_str) if lat_str else None
         lon = float(lon_str) if lon_str else None
+        quota_val    = request.form.get("quota_amount", "").strip()
+        quota_unit   = request.form.get("quota_unit", "MB")
+        quota_mb     = None
+        if quota_val:
+            try:
+                quota_mb = int(float(quota_val) * (1024 if quota_unit == "GB" else 1))
+            except ValueError:
+                pass
 
         if not is_valid_client_name(client):
             flash("Invalid name. Letters, numbers, underscores only.")
@@ -872,7 +1031,7 @@ PersistentKeepalive = 25
         qr.save(f"qr_codes/{client}.png")
 
         token = add_client(client, client_ip, notes, tags, location, lat, lon, expires,
-                           access_mode=access_mode)
+                           access_mode=access_mode, quota_mb=quota_mb)
         new_client_portal_url = url_for("portal", token=token, _external=True)
         add_log(f"Created client {client}")
         notif.send_notification("new_client", f"New VPN client '{client}' created with IP {client_ip}.")
@@ -881,6 +1040,9 @@ PersistentKeepalive = 25
             mt = MikroTikAPI()
             mt.connect()
             mt.add_peer(public_key, f"{client_ip}/32", client)
+            if access_mode == "internet":
+                mt.ensure_lan_block_rule()
+                mt.add_to_lan_block(client_ip)
             mt.disconnect()
         except Exception as e:
             flash(f"MikroTik error: {e}")
@@ -964,9 +1126,12 @@ def download(client):
 def delete_client(client):
     mt_error = None
     try:
-        mt = MikroTikAPI(); mt.connect()
+        mt  = MikroTikAPI(); mt.connect()
+        row = get_client(client)
         if not mt.delete_peer_by_comment(client):
             mt_error = f"Peer '{client}' not found on MikroTik."
+        if row:
+            mt.remove_from_lan_block(row["ip"])
         mt.disconnect()
     except Exception as e:
         mt_error = str(e)
@@ -1028,6 +1193,14 @@ def update_client(client):
     access_mode = request.form.get("access_mode", "internet")
     lat = float(lat_str) if lat_str else None
     lon = float(lon_str) if lon_str else None
+    quota_val   = request.form.get("quota_amount", "").strip()
+    quota_unit  = request.form.get("quota_unit", "MB")
+    quota_mb    = None
+    if quota_val:
+        try:
+            quota_mb = int(float(quota_val) * (1024 if quota_unit == "GB" else 1))
+        except ValueError:
+            pass
 
     row = get_client(client)
     if row:
@@ -1042,11 +1215,21 @@ def update_client(client):
                     f.write(new_conf)
                 qr = qrcode.make(new_conf)
                 qr.save(f"qr_codes/{client}.png")
+            try:
+                mt = MikroTikAPI(); mt.connect()
+                if access_mode == "internet":
+                    mt.ensure_lan_block_rule()
+                    mt.add_to_lan_block(row["ip"])
+                else:
+                    mt.remove_from_lan_block(row["ip"])
+                mt.disconnect()
+            except Exception:
+                pass
 
     conn = get_db_connection()
     conn.execute(
-        "UPDATE clients SET notes=?,tags=?,location=?,lat=?,lon=?,expires_at=?,access_mode=? WHERE name=?",
-        (notes, tags, location, lat, lon, expires, access_mode, client)
+        "UPDATE clients SET notes=?,tags=?,location=?,lat=?,lon=?,expires_at=?,access_mode=?,quota_mb=? WHERE name=?",
+        (notes, tags, location, lat, lon, expires, access_mode, quota_mb, client)
     )
     conn.commit(); conn.close()
     add_log(f"Updated {client}")
@@ -1096,7 +1279,8 @@ PersistentKeepalive = 25
 
     add_client(new_name, client_ip, notes=src["notes"] or "", tags=src["tags"] or "",
                location=src["location"] or "", lat=src["lat"], lon=src["lon"],
-               expires_at=src["expires_at"], access_mode=src_mode)
+               expires_at=src["expires_at"], access_mode=src_mode,
+               quota_mb=src["quota_mb"])
 
     try:
         mt = MikroTikAPI(); mt.connect()
@@ -1118,7 +1302,14 @@ def toggle_client(client):
     new_state = not bool(row["disabled"])
     try:
         mt = MikroTikAPI(); mt.connect()
-        mt.disable_peer_by_name(client) if new_state else mt.enable_peer_by_name(client)
+        if new_state:
+            mt.disable_peer_by_name(client)
+            mt.remove_from_lan_block(row["ip"])
+        else:
+            mt.enable_peer_by_name(client)
+            if row["access_mode"] == "internet":
+                mt.ensure_lan_block_rule()
+                mt.add_to_lan_block(row["ip"])
         mt.disconnect()
     except Exception as e:
         flash(f"MikroTik error: {e}"); return redirect(url_for("home"))
@@ -1144,19 +1335,27 @@ def bulk_action():
     results = []
     for name in clients:
         try:
-            mt = MikroTikAPI(); mt.connect()
+            row  = get_client(name)
+            mt   = MikroTikAPI(); mt.connect()
             if action == "enable":
                 mt.enable_peer_by_name(name)
+                if row and row["access_mode"] == "internet":
+                    mt.ensure_lan_block_rule()
+                    mt.add_to_lan_block(row["ip"])
                 conn = get_db_connection()
                 conn.execute("UPDATE clients SET disabled=0 WHERE name=?", (name,))
                 conn.commit(); conn.close()
             elif action == "disable":
                 mt.disable_peer_by_name(name)
+                if row:
+                    mt.remove_from_lan_block(row["ip"])
                 conn = get_db_connection()
                 conn.execute("UPDATE clients SET disabled=1 WHERE name=?", (name,))
                 conn.commit(); conn.close()
             elif action == "delete":
                 mt.delete_peer_by_comment(name)
+                if row:
+                    mt.remove_from_lan_block(row["ip"])
                 conn = get_db_connection()
                 for tbl in ["clients","traffic_history","peer_events","ping_history","uptime_log"]:
                     col = "name" if tbl == "clients" else "client"
@@ -1445,6 +1644,35 @@ def api_uptime(client):
     return jsonify({"uptime": get_uptime_percent(client, hours=hours)})
 
 
+@app.route("/api/uptime-history/<client>")
+@login_required
+def api_uptime_history(client):
+    """Return per-day uptime % for the last 7 days (including today)."""
+    conn  = get_db_connection()
+    since = (datetime.utcnow() - timedelta(days=6)).strftime("%Y-%m-%d %H:%M:%S UTC")
+    rows  = conn.execute(
+        """SELECT DATE(recorded_at) AS day,
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN status='Online' THEN 1 ELSE 0 END) AS online_count
+           FROM uptime_log
+           WHERE client=? AND recorded_at>=?
+           GROUP BY DATE(recorded_at)
+           ORDER BY day ASC""",
+        (client, since)
+    ).fetchall()
+    conn.close()
+
+    row_map = {r["day"]: r for r in rows}
+    result  = []
+    for i in range(6, -1, -1):
+        day   = (datetime.utcnow() - timedelta(days=i)).strftime("%Y-%m-%d")
+        label = "Today" if i == 0 else f"-{i}d"
+        r     = row_map.get(day)
+        pct   = round((r["online_count"] / r["total"]) * 100, 1) if r and r["total"] else None
+        result.append({"day": day, "label": label, "pct": pct})
+    return jsonify(result)
+
+
 @app.route("/api/sys")
 @login_required
 def api_sys():
@@ -1460,10 +1688,12 @@ def api_sys():
 @login_required
 def api_mt_health():
     try:
-        mt = MikroTikAPI(); mt.connect(); mt.disconnect()
-        return jsonify({"ok":True})
+        mt = MikroTikAPI(); mt.connect()
+        fw_count = mt.get_firewall_rule_count()
+        mt.disconnect()
+        return jsonify({"ok": True, "firewall_rules": fw_count})
     except Exception as e:
-        return jsonify({"ok":False,"error":str(e)})
+        return jsonify({"ok": False, "error": str(e)})
 
 
 # ─────────────────────────────────────────────
@@ -1502,6 +1732,14 @@ def portal_qr(token):
     return send_file(path, mimetype="image/png")
 
 
+@app.route("/sw.js")
+def service_worker():
+    resp = send_from_directory("static", "sw.js", mimetype="application/javascript")
+    resp.headers["Service-Worker-Allowed"] = "/"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 # ─────────────────────────────────────────────
 # NOTIFICATIONS
 # ─────────────────────────────────────────────
@@ -1535,12 +1773,17 @@ def notifications_save():
         "telegram_enabled":  ib("telegram_enabled"),
         "telegram_token":    sv("telegram_token"),
         "telegram_chat_id":  sv("telegram_chat_id"),
-        "notify_connect":    ib("notify_connect"),
-        "notify_disconnect": ib("notify_disconnect"),
-        "notify_expiry":     ib("notify_expiry"),
-        "notify_new_client": ib("notify_new_client"),
-        "notify_delete":     ib("notify_delete"),
-        "notify_regen":      ib("notify_regen"),
+        "notify_connect":          ib("notify_connect"),
+        "notify_disconnect":       ib("notify_disconnect"),
+        "notify_expiry":           ib("notify_expiry"),
+        "notify_new_client":       ib("notify_new_client"),
+        "notify_delete":           ib("notify_delete"),
+        "notify_regen":            ib("notify_regen"),
+        "notify_quota":            ib("notify_quota"),
+        "notify_expiry_reminder":  ib("notify_expiry_reminder"),
+        "notify_login_failure":    ib("notify_login_failure"),
+        "notify_login_locked":     ib("notify_login_locked"),
+        "notify_provision":        ib("notify_provision"),
     }
     notif.save_settings(data)
     add_log("Updated notification settings")
@@ -1620,6 +1863,264 @@ def reset_all():
     add_log("Reset all")
     flash("Dashboard and MikroTik peers reset.")
     return redirect(url_for("home"))
+
+
+# ─────────────────────────────────────────────
+# PROVISION URLs
+# ─────────────────────────────────────────────
+
+@app.route("/provision/manage")
+@login_required
+def provision_manage():
+    conn   = get_db_connection()
+    tokens = conn.execute("SELECT * FROM provision_tokens ORDER BY id DESC").fetchall()
+    conn.close()
+    add_log("Viewed provision URL manager")
+    return render_template("provision_manage.html", tokens=tokens)
+
+
+@app.route("/provision/create", methods=["POST"])
+@login_required
+def provision_create():
+    label       = request.form.get("label","").strip()
+    tags        = ",".join(t.strip() for t in request.form.get("tags","").split(",") if t.strip())
+    access_mode = request.form.get("access_mode","internet")
+    expires     = request.form.get("expires_at","").strip() or None
+    quota_val   = request.form.get("quota_amount","").strip()
+    quota_unit  = request.form.get("quota_unit","MB")
+    quota_mb    = None
+    if quota_val:
+        try:
+            quota_mb = int(float(quota_val) * (1024 if quota_unit == "GB" else 1))
+        except ValueError:
+            pass
+
+    token = secrets.token_urlsafe(32)
+    now   = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    conn  = get_db_connection()
+    conn.execute(
+        "INSERT INTO provision_tokens (token,label,tags,access_mode,quota_mb,expires_at,created_at) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (token, label, tags, access_mode, quota_mb, expires, now)
+    )
+    conn.commit(); conn.close()
+    add_log(f"Created provision URL for label '{label}'")
+    provision_url = url_for("provision_use", token=token, _external=True)
+    return render_template("provision_manage.html",
+        tokens=get_db_connection().execute("SELECT * FROM provision_tokens ORDER BY id DESC").fetchall(),
+        new_url=provision_url, new_label=label)
+
+
+@app.route("/provision/<token>")
+def provision_use(token):
+    """One-time provision URL — no login required. Creates a client on first visit."""
+    conn = get_db_connection()
+    pt   = conn.execute("SELECT * FROM provision_tokens WHERE token=?", (token,)).fetchone()
+    conn.close()
+
+    if not pt or pt["used"]:
+        return render_template("provision_error.html"), 410
+
+    # Build client name from label + short random suffix
+    base      = re.sub(r"[^a-zA-Z0-9_]", "_", pt["label"] or "client")[:20].strip("_") or "client"
+    suffix    = secrets.token_urlsafe(3).lower().replace("-","").replace("_","")[:4]
+    client    = f"{base}_{suffix}"
+
+    # Ensure name is unique
+    for attempt in range(10):
+        if not get_client(client):
+            break
+        suffix = secrets.token_urlsafe(3).lower().replace("-","").replace("_","")[:4]
+        client = f"{base}_{suffix}"
+
+    client_ip = get_next_ip()
+    if not client_ip:
+        return "No IPs available.", 503
+
+    access_mode = pt["access_mode"] or "internet"
+    allowed_ips = build_allowed_ips(access_mode)
+    private_key = subprocess.check_output("wg genkey", shell=True).decode().strip()
+    public_key  = subprocess.check_output(f"echo {private_key} | wg pubkey", shell=True).decode().strip()
+
+    config = f"""[Interface]
+PrivateKey = {private_key}
+Address = {client_ip}/24
+DNS = {CLIENT_DNS}
+
+[Peer]
+PublicKey = {SERVER_PUBLIC_KEY}
+Endpoint = {SERVER_IP}:{SERVER_PORT}
+AllowedIPs = {allowed_ips}
+PersistentKeepalive = 25
+"""
+    os.makedirs("clients",  exist_ok=True)
+    os.makedirs("qr_codes", exist_ok=True)
+    with open(f"clients/{client}.conf", "w") as f:
+        f.write(config)
+    qr = qrcode.make(config)
+    qr.save(f"qr_codes/{client}.png")
+
+    token_portal = add_client(client, client_ip, tags=pt["tags"] or "",
+                              expires_at=pt["expires_at"], access_mode=access_mode,
+                              quota_mb=pt["quota_mb"])
+    try:
+        mt = MikroTikAPI(); mt.connect()
+        mt.add_peer(public_key, f"{client_ip}/32", client)
+        if access_mode == "internet":
+            mt.ensure_lan_block_rule()
+            mt.add_to_lan_block(client_ip)
+        mt.disconnect()
+    except Exception:
+        pass
+
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    c2  = get_db_connection()
+    c2.execute("UPDATE provision_tokens SET used=1, used_at=? WHERE token=?", (now, token))
+    c2.commit(); c2.close()
+
+    add_log(f"Provision URL used — created client '{client}'")
+    notif.send_notification("provision",
+        f"Provision URL used — new client '{client}' created with IP {client_ip}.")
+
+    db_client = get_client(client)
+    return render_template("provision.html",
+        client=db_client, config=config, label=pt["label"])
+
+
+@app.route("/provision/delete/<int:token_id>", methods=["POST"])
+@login_required
+def provision_delete(token_id):
+    conn = get_db_connection()
+    pt   = conn.execute("SELECT * FROM provision_tokens WHERE id=?", (token_id,)).fetchone()
+    if pt and not pt["used"]:
+        conn.execute("DELETE FROM provision_tokens WHERE id=?", (token_id,))
+        conn.commit()
+        add_log(f"Deleted provision token for '{pt['label']}'")
+    conn.close()
+    flash("Provision token deleted.")
+    return redirect(url_for("provision_manage"))
+
+
+# ─────────────────────────────────────────────
+# ADMIN USER MANAGEMENT
+# ─────────────────────────────────────────────
+
+@app.route("/admin/users")
+@admin_required
+def admin_users_page():
+    conn  = get_db_connection()
+    users = conn.execute("SELECT * FROM admin_users ORDER BY created_at").fetchall()
+    conn.close()
+    return render_template("admin_users.html", users=users,
+                           current_user=session.get("username"),
+                           current_role=session.get("role"))
+
+
+@app.route("/admin/users/add", methods=["POST"])
+@admin_required
+def admin_users_add():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    role     = request.form.get("role", "viewer")
+    if not username or not password:
+        flash("Username and password are required.")
+        return redirect(url_for("admin_users_page"))
+    if role not in ("admin", "viewer"):
+        role = "viewer"
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            "INSERT INTO admin_users (username, password_hash, role, created_at) VALUES (?,?,?,?)",
+            (username, generate_password_hash(password), role, datetime.utcnow().isoformat())
+        )
+        conn.commit()
+        add_log(f"Created admin user '{username}' with role '{role}'")
+        flash(f"User '{username}' created.")
+    except sqlite3.IntegrityError:
+        flash(f"Username '{username}' already exists.")
+    conn.close()
+    return redirect(url_for("admin_users_page"))
+
+
+@app.route("/admin/users/delete/<int:uid>", methods=["POST"])
+@admin_required
+def admin_users_delete(uid):
+    conn     = get_db_connection()
+    target   = conn.execute("SELECT * FROM admin_users WHERE id=?", (uid,)).fetchone()
+    if not target:
+        flash("User not found.")
+        conn.close()
+        return redirect(url_for("admin_users_page"))
+    if target["username"] == session.get("username"):
+        flash("Cannot delete your own account.")
+        conn.close()
+        return redirect(url_for("admin_users_page"))
+    # Prevent deleting the last admin
+    admin_count = conn.execute("SELECT COUNT(*) FROM admin_users WHERE role='admin'").fetchone()[0]
+    if target["role"] == "admin" and admin_count <= 1:
+        flash("Cannot delete the last admin account.")
+        conn.close()
+        return redirect(url_for("admin_users_page"))
+    conn.execute("DELETE FROM admin_users WHERE id=?", (uid,))
+    conn.commit()
+    add_log(f"Deleted admin user '{target['username']}'")
+    flash(f"User '{target['username']}' deleted.")
+    conn.close()
+    return redirect(url_for("admin_users_page"))
+
+
+@app.route("/admin/users/change-password/<int:uid>", methods=["POST"])
+@admin_required
+def admin_users_change_password(uid):
+    new_pw = request.form.get("new_password", "")
+    if not new_pw:
+        flash("Password cannot be empty.")
+        return redirect(url_for("admin_users_page"))
+    conn   = get_db_connection()
+    target = conn.execute("SELECT * FROM admin_users WHERE id=?", (uid,)).fetchone()
+    if not target:
+        flash("User not found.")
+        conn.close()
+        return redirect(url_for("admin_users_page"))
+    conn.execute(
+        "UPDATE admin_users SET password_hash=? WHERE id=?",
+        (generate_password_hash(new_pw), uid)
+    )
+    conn.commit()
+    add_log(f"Changed password for admin user '{target['username']}'")
+    flash(f"Password updated for '{target['username']}'.")
+    conn.close()
+    return redirect(url_for("admin_users_page"))
+
+
+@app.route("/admin/users/change-role/<int:uid>", methods=["POST"])
+@admin_required
+def admin_users_change_role(uid):
+    new_role = request.form.get("role", "viewer")
+    if new_role not in ("admin", "viewer"):
+        new_role = "viewer"
+    conn   = get_db_connection()
+    target = conn.execute("SELECT * FROM admin_users WHERE id=?", (uid,)).fetchone()
+    if not target:
+        flash("User not found.")
+        conn.close()
+        return redirect(url_for("admin_users_page"))
+    if target["username"] == session.get("username"):
+        flash("Cannot change your own role.")
+        conn.close()
+        return redirect(url_for("admin_users_page"))
+    if target["role"] == "admin" and new_role != "admin":
+        admin_count = conn.execute("SELECT COUNT(*) FROM admin_users WHERE role='admin'").fetchone()[0]
+        if admin_count <= 1:
+            flash("Cannot demote the last admin.")
+            conn.close()
+            return redirect(url_for("admin_users_page"))
+    conn.execute("UPDATE admin_users SET role=? WHERE id=?", (new_role, uid))
+    conn.commit()
+    add_log(f"Changed role of '{target['username']}' to '{new_role}'")
+    flash(f"Role updated for '{target['username']}'.")
+    conn.close()
+    return redirect(url_for("admin_users_page"))
 
 
 # ─────────────────────────────────────────────

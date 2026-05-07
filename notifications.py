@@ -42,12 +42,17 @@ def get_settings():
         "telegram_token":   "",
         "telegram_chat_id": "",
         # Events to notify on
-        "notify_connect":   1,
-        "notify_disconnect":1,
-        "notify_expiry":    1,
-        "notify_new_client":1,
-        "notify_delete":    1,
-        "notify_regen":     0,
+        "notify_connect":          1,
+        "notify_disconnect":       1,
+        "notify_expiry":           1,
+        "notify_new_client":       1,
+        "notify_delete":           1,
+        "notify_regen":            0,
+        "notify_quota":            1,
+        "notify_expiry_reminder":  1,
+        "notify_login_failure":    0,
+        "notify_login_locked":     1,
+        "notify_provision":        1,
     }
 
 
@@ -61,14 +66,18 @@ def save_settings(data: dict):
             email_user, email_pass, email_from, email_to, email_tls,
             telegram_enabled, telegram_token, telegram_chat_id,
             notify_connect, notify_disconnect, notify_expiry,
-            notify_new_client, notify_delete, notify_regen
+            notify_new_client, notify_delete, notify_regen,
+            notify_quota, notify_expiry_reminder,
+            notify_login_failure, notify_login_locked, notify_provision
         ) VALUES (
             :discord_enabled, :discord_webhook,
             :email_enabled, :email_host, :email_port,
             :email_user, :email_pass, :email_from, :email_to, :email_tls,
             :telegram_enabled, :telegram_token, :telegram_chat_id,
             :notify_connect, :notify_disconnect, :notify_expiry,
-            :notify_new_client, :notify_delete, :notify_regen
+            :notify_new_client, :notify_delete, :notify_regen,
+            :notify_quota, :notify_expiry_reminder,
+            :notify_login_failure, :notify_login_locked, :notify_provision
         )
     """, data)
     conn.commit()
@@ -160,12 +169,17 @@ def send_notification(event: str, message: str, subject: str = None):
 
     # Check if this event type is enabled (test always goes through)
     event_map = {
-        "connect":    "notify_connect",
-        "disconnect": "notify_disconnect",
-        "expiry":     "notify_expiry",
-        "new_client": "notify_new_client",
-        "delete":     "notify_delete",
-        "regen":      "notify_regen",
+        "connect":          "notify_connect",
+        "disconnect":       "notify_disconnect",
+        "expiry":           "notify_expiry",
+        "new_client":       "notify_new_client",
+        "delete":           "notify_delete",
+        "regen":            "notify_regen",
+        "quota":            "notify_quota",
+        "expiry_reminder":  "notify_expiry_reminder",
+        "login_failure":    "notify_login_failure",
+        "login_locked":     "notify_login_locked",
+        "provision":        "notify_provision",
     }
 
     if event != "test":

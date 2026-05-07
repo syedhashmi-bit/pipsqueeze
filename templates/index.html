@@ -266,9 +266,40 @@
         .badge-lan{display:inline-block;padding:2px 7px;border-radius:2px;font-family:var(--mono);font-size:10px;background:var(--yellow-dim);color:var(--yellow);border:1px solid rgba(255,201,64,0.2);}
         .badge-full{display:inline-block;padding:2px 7px;border-radius:2px;font-family:var(--mono);font-size:10px;background:var(--green-dim);color:var(--green);border:1px solid rgba(0,255,157,0.2);}
 
+        /* HAMBURGER */
+        .hamburger{display:none;background:var(--cyan-dim);border:1px solid var(--border-lit);color:var(--cyan);padding:9px 13px;border-radius:3px;font-size:16px;cursor:pointer;line-height:1;}
+        .nav-secondary{display:flex;gap:8px;flex-wrap:wrap;}
+
         /* RESPONSIVE */
         @media(max-width:1080px){.main-grid{grid-template-columns:1fr;}.right-panel{position:static;}}
-        @media(max-width:800px){body{padding:16px;}.topbar{flex-direction:column;}.nav-actions{justify-content:flex-start;}.sys-strip,.stats-row{grid-template-columns:1fr 1fr;}}
+        @media(max-width:800px){
+            body{padding:16px;}
+            .topbar{flex-direction:column;}
+            .nav-actions{justify-content:flex-start;}
+            .sys-strip,.stats-row{grid-template-columns:1fr 1fr;}
+        }
+        @media(max-width:640px){
+            body{padding:12px;}
+            .hamburger{display:block;}
+            .nav-secondary{display:none;width:100%;}
+            .nav-secondary.open{display:flex;flex-direction:column;align-items:stretch;}
+            .nav-secondary a,.nav-secondary form{width:100%;}
+            .nav-secondary .btn{width:100%;justify-content:center;}
+            /* Client table → card layout */
+            .table-shell{border:none;background:transparent;}
+            #clientTable{min-width:0;}
+            #clientTable thead{display:none;}
+            #clientTable tbody tr{
+                display:block;background:var(--panel);border:1px solid var(--border);
+                border-radius:5px;margin-bottom:10px;padding:12px;
+            }
+            #clientTable tbody tr:hover td{background:transparent;}
+            #clientTable tbody td{display:block;padding:0;border:none;margin-bottom:5px;}
+            #clientTable tbody td:first-child{display:none;}
+            #clientTable tbody td:last-child{margin-bottom:0;}
+            .row-actions{flex-wrap:wrap;gap:4px;}
+            .bulk-bar{display:none !important;}
+        }
         @media(max-width:500px){.sys-strip,.stats-row{grid-template-columns:1fr;}}
     </style>
 </head>
@@ -295,6 +326,7 @@
             <p class="page-sub">// CREATE · MANAGE · MONITOR · INFRASTRUCTURE</p>
         </div>
         <div class="nav-actions">
+            <!-- Always-visible row: bell, theme, peers, logout, hamburger -->
             <!-- Notification Bell -->
             <div style="position:relative;">
                 <button class="notif-bell" id="notifBtn" onclick="toggleNotif()" title="Alerts">
@@ -311,38 +343,56 @@
                     {% endif %}
                 </div>
             </div>
-
-            <!-- Theme toggle -->
             <button class="theme-btn" onclick="toggleTheme()" title="Toggle dark/light">🌓</button>
-
             <a href="{{ url_for('wireguard') }}" target="_blank" rel="noopener noreferrer">
                 <button class="btn btn-ghost" type="button">📡 PEERS</button>
             </a>
-            <a href="{{ url_for('notifications_page') }}">
-                <button class="btn btn-ghost" type="button">🔔 ALERTS</button>
-            </a>
-            <a href="{{ url_for('security_page') }}">
-                <button class="btn btn-ghost" type="button">🔒 SECURITY</button>
-            </a>
-            <a href="{{ url_for('weekly_report') }}">
-                <button class="btn btn-ghost" type="button">📊 REPORT</button>
-            </a>
-            <a href="{{ url_for('map_view') }}">
-                <button class="btn btn-ghost" type="button">🗺 MAP</button>
-            </a>
-            <a href="{{ url_for('export_csv') }}">
-                <button class="btn btn-ghost" type="button">⬇ CSV</button>
-            </a>
-            <a href="{{ url_for('backup') }}">
-                <button class="btn btn-ghost" type="button">⬇ BACKUP</button>
-            </a>
-            <form method="post" action="{{ url_for('reset_db') }}" onsubmit="return confirm('Wipe all records?');">
-                <button class="btn btn-danger" type="submit">RESET DB</button>
-            </form>
-            <form method="post" action="{{ url_for('reset_all') }}" onsubmit="return confirmResetAll();">
-                <button class="btn btn-danger" type="submit">⚠ RESET ALL</button>
-            </form>
+            {% if session.get('username') %}
+            <span style="font-family:var(--mono);font-size:11px;color:var(--muted-mid);white-space:nowrap;">
+                {{ session.username }}
+                <span style="color:{% if session.role == 'admin' %}var(--cyan){% else %}var(--yellow){% endif %};margin-left:4px;">[{{ session.role|upper }}]</span>
+            </span>
+            {% endif %}
             <a href="{{ url_for('logout') }}"><button class="btn btn-ghost" type="button">LOGOUT</button></a>
+            <button class="hamburger" onclick="toggleMobileNav()" title="Menu">☰</button>
+
+            <!-- Secondary nav (collapses on mobile) -->
+            <div class="nav-secondary" id="navSecondary">
+                <a href="{{ url_for('notifications_page') }}">
+                    <button class="btn btn-ghost" type="button">🔔 ALERTS</button>
+                </a>
+                <a href="{{ url_for('security_page') }}">
+                    <button class="btn btn-ghost" type="button">🔒 SECURITY</button>
+                </a>
+                <a href="{{ url_for('weekly_report') }}">
+                    <button class="btn btn-ghost" type="button">📊 REPORT</button>
+                </a>
+                <a href="{{ url_for('map_view') }}">
+                    <button class="btn btn-ghost" type="button">🗺 MAP</button>
+                </a>
+                <a href="{{ url_for('export_csv') }}">
+                    <button class="btn btn-ghost" type="button">⬇ CSV</button>
+                </a>
+                <a href="{{ url_for('backup') }}">
+                    <button class="btn btn-ghost" type="button">⬇ BACKUP</button>
+                </a>
+                <a href="{{ url_for('provision_manage') }}">
+                    <button class="btn btn-ghost" type="button">🔗 PROVISION</button>
+                </a>
+                {% if session.get('role') == 'admin' %}
+                <a href="{{ url_for('admin_users_page') }}">
+                    <button class="btn btn-ghost" type="button">👥 USERS</button>
+                </a>
+                {% endif %}
+                {% if session.get('role') == 'admin' %}
+                <form method="post" action="{{ url_for('reset_db') }}" onsubmit="return confirm('Wipe all records?');">
+                    <button class="btn btn-danger" type="submit">RESET DB</button>
+                </form>
+                <form method="post" action="{{ url_for('reset_all') }}" onsubmit="return confirmResetAll();">
+                    <button class="btn btn-danger" type="submit">⚠ RESET ALL</button>
+                </form>
+                {% endif %}
+            </div>
         </div>
     </div>
 
@@ -421,6 +471,7 @@
         <!-- LEFT -->
         <div>
 
+            {% if session.get('role') == 'admin' %}
             <!-- CREATE CLIENT -->
             <div class="panel">
                 <div class="panel-header">
@@ -451,6 +502,19 @@
                         <span class="i-icon">📅</span>
                         <input type="date" name="expires_at">
                     </div>
+
+                    <label class="fl">Data Quota (optional)</label>
+                    <div style="display:flex;gap:8px;margin-bottom:4px;">
+                        <div class="input-row" style="flex:1;margin-bottom:0;">
+                            <span class="i-icon">◎</span>
+                            <input type="number" name="quota_amount" min="1" step="1" placeholder="e.g. 500">
+                        </div>
+                        <select name="quota_unit" style="padding:11px 10px;background:rgba(0,200,255,0.04);border:1px solid rgba(0,200,255,0.13);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;min-width:70px;">
+                            <option value="MB">MB</option>
+                            <option value="GB">GB</option>
+                        </select>
+                    </div>
+                    <div class="helper" style="margin-bottom:14px;">// Leave blank for unlimited data</div>
 
                     <label class="fl">Location (optional)</label>
                     <div style="display:flex;gap:8px;margin-bottom:8px;">
@@ -491,6 +555,7 @@
                     <div class="loader"></div><br>GENERATING...
                 </div>
             </div>
+            {% endif %}
 
             <!-- CLIENT LIST -->
             <div class="panel">
@@ -517,9 +582,13 @@
                 <div class="bulk-bar" id="bulkBar">
                     <span class="bulk-count" id="bulkCount">0 selected</span>
                     <form method="post" action="{{ url_for('bulk_action') }}" id="bulkForm" style="display:flex;gap:7px;flex-wrap:wrap;">
+                        {% if session.get('role') == 'admin' %}
                         <button class="btn btn-green btn-sm" type="submit" name="bulk_action" value="enable">ENABLE</button>
                         <button class="btn btn-yellow btn-sm" type="submit" name="bulk_action" value="disable">DISABLE</button>
                         <button class="btn btn-danger btn-sm" type="button" onclick="openBulkDeleteModal()">DELETE</button>
+                        {% else %}
+                        <span style="font-family:var(--mono);font-size:11px;color:var(--muted);">Viewer — read only</span>
+                        {% endif %}
                     </form>
                 </div>
 
@@ -556,6 +625,16 @@
                                     {% if c.total_rx or c.total_tx %}
                                     <div class="client-data">↓{{ (c.total_rx/1048576)|round(2) }}MB ↑{{ (c.total_tx/1048576)|round(2) }}MB</div>
                                     {% endif %}
+                                    {% if c.quota_mb %}
+                                    {% set used_mb = ((c.total_rx or 0) + (c.total_tx or 0)) / 1048576 %}
+                                    {% set pct = [[(used_mb / c.quota_mb * 100)|round(1), 0]|max, 100]|min %}
+                                    <div style="margin-top:4px;">
+                                        <div class="bar-wrap" style="margin-top:0;">
+                                            <div class="bar-fill {% if pct >= 90 %}bar-red{% elif pct >= 75 %}bar-yellow{% else %}bar-green{% endif %}" style="width:{{ pct }}%"></div>
+                                        </div>
+                                        <div class="client-data" style="color:{% if pct >= 90 %}var(--red){% elif pct >= 75 %}var(--yellow){% else %}var(--muted-mid){% endif %};">{{ used_mb|round(0)|int }}MB / {{ c.quota_mb }}MB</div>
+                                    </div>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {% if c.disabled %}<span class="chip chip-red">OFF</span>
@@ -577,7 +656,7 @@
                                             </button>
                                         </form>
                                         <button class="btn btn-ghost btn-sm" onclick="openRename('{{ c.name }}')" title="Rename">✎</button>
-                                        <button class="btn btn-ghost btn-sm" onclick="openEdit('{{ c.name }}','{{ c.notes|replace("'","\\'") }}','{{ c.expires_at or "" }}','{{ c.tags or "" }}','{{ c.location or "" }}','{{ c.lat or "" }}','{{ c.lon or "" }}','{{ c.access_mode or "internet" }}')" title="Edit settings">⚙</button>
+                                        <button class="btn btn-ghost btn-sm" onclick="openEdit('{{ c.name }}','{{ c.notes|replace("'","\\'") }}','{{ c.expires_at or "" }}','{{ c.tags or "" }}','{{ c.location or "" }}','{{ c.lat or "" }}','{{ c.lon or "" }}','{{ c.access_mode or "internet" }}',{{ c.quota_mb or 'null' }},{{ c.total_rx or 0 }},{{ c.total_tx or 0 }})" title="Edit settings">⚙</button>
                                         <button class="btn btn-ghost btn-sm" onclick="openClone('{{ c.name }}')" title="Clone client">⎘</button>
                                         <button class="btn btn-ghost btn-sm" onclick="copyPortal('{{ url_for("portal", token=c.portal_token, _external=True) }}')" title="Copy portal link">🔗</button>
                                         <form method="post" action="{{ url_for('rotate_portal', client=c.name) }}" onsubmit="return confirm('Rotate portal link for {{ c.name }}? Old link stops working.')">
@@ -586,9 +665,11 @@
                                         <form method="post" action="{{ url_for('regen_client', client=c.name) }}" onsubmit="return confirm('Regenerate keys for {{ c.name }}?')">
                                             <button class="btn btn-yellow btn-sm" type="submit" title="Regenerate keys">↻</button>
                                         </form>
+                                        {% if session.get('role') == 'admin' %}
                                         <form method="post" action="{{ url_for('delete_client', client=c.name) }}" onsubmit="return confirm('Delete {{ c.name }}?')">
                                             <button class="btn btn-danger btn-sm" type="submit" title="Delete">✕</button>
                                         </form>
+                                        {% endif %}
                                     </div>
                                 </td>
                             </tr>
@@ -717,6 +798,19 @@
             <label class="fl">Expiry Date</label>
             <div class="input-row" style="margin-bottom:14px;"><span class="i-icon">📅</span>
             <input type="date" name="expires_at" id="editExpiry"></div>
+            <label class="fl">Data Quota</label>
+            <div id="editQuotaUsage" style="font-family:var(--mono);font-size:11px;color:var(--cyan);margin-bottom:6px;min-height:16px;"></div>
+            <div style="display:flex;gap:8px;margin-bottom:4px;">
+                <div class="input-row" style="flex:1;margin-bottom:0;">
+                    <span class="i-icon">◎</span>
+                    <input type="number" name="quota_amount" id="editQuotaAmount" min="1" step="1" placeholder="Leave blank for unlimited">
+                </div>
+                <select name="quota_unit" id="editQuotaUnit" style="padding:11px 10px;background:rgba(0,200,255,0.04);border:1px solid rgba(0,200,255,0.13);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;min-width:70px;">
+                    <option value="MB">MB</option>
+                    <option value="GB">GB</option>
+                </select>
+            </div>
+            <div class="helper" style="margin-bottom:14px;">// Leave blank to clear quota</div>
             <label class="fl">Location</label>
             <div style="display:flex;gap:8px;margin-bottom:8px;">
                 <div class="input-row" style="flex:1;margin-bottom:0;"><span class="i-icon">📍</span>
@@ -774,6 +868,12 @@
 <div id="toast" class="toast"></div>
 
 <script>
+// ── MOBILE NAV ──
+function toggleMobileNav(){
+    const nav=document.getElementById('navSecondary');
+    if(nav)nav.classList.toggle('open');
+}
+
 // ── THEME ──
 function toggleTheme(){
     const b=document.getElementById('mainBody');
@@ -857,7 +957,7 @@ function openRename(name){
     document.getElementById('renameInput').value='';
     openModal('renameModal','renameInput');
 }
-function openEdit(name,notes,expiry,tags,location,lat,lon,access_mode){
+function openEdit(name,notes,expiry,tags,location,lat,lon,access_mode,quota_mb,total_rx,total_tx){
     document.getElementById('editForm').action='/update/'+name;
     document.getElementById('editNotes').value=notes||'';
     document.getElementById('editExpiry').value=expiry||'';
@@ -873,6 +973,18 @@ function openEdit(name,notes,expiry,tags,location,lat,lon,access_mode){
     });
     const descs={internet:'// Routes all internet traffic through VPN (0.0.0.0/0)',lan:'// LAN access only — 192.168.88.0/24',full:'// Full access — internet + LAN (0.0.0.0/0 + 192.168.88.0/24)'};
     const d=document.getElementById('editAccessDesc');if(d)d.innerText=descs[mode]||'';
+    // Quota
+    const qa=document.getElementById('editQuotaAmount');
+    const qu=document.getElementById('editQuotaUnit');
+    const qUsage=document.getElementById('editQuotaUsage');
+    if(quota_mb){
+        if(quota_mb>=1024){qa.value=(quota_mb/1024).toFixed(1);qu.value='GB';}
+        else{qa.value=quota_mb;qu.value='MB';}
+        const usedMB=((parseInt(total_rx||0)+parseInt(total_tx||0))/1048576).toFixed(1);
+        const pct=Math.min(100,((usedMB/quota_mb)*100).toFixed(1));
+        const color=pct>=90?'var(--red)':pct>=75?'var(--yellow)':'var(--green)';
+        if(qUsage)qUsage.innerHTML=`<span style="color:${color}">Used: ${usedMB}MB / ${quota_mb}MB (${pct}%)</span>`;
+    }else{qa.value='';qu.value='MB';if(qUsage)qUsage.innerText='';}
     openModal('editModal','editTags');
 }
 function openClone(name){
@@ -1035,6 +1147,9 @@ function geocode(ctx){
             btnEl.innerText = '🔍 LOOKUP';
         });
 }
+</script>
+<script>
+if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}
 </script>
 </body>
 </html>

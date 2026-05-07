@@ -404,6 +404,46 @@
                     </label>
                     <span class="event-label">↻ Keys Regenerated</span>
                 </label>
+
+                <label class="event-toggle">
+                    <label class="toggle">
+                        <input type="checkbox" name="notify_quota" {% if s.notify_quota %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="event-label">📊 Quota Exceeded</span>
+                </label>
+
+                <label class="event-toggle">
+                    <label class="toggle">
+                        <input type="checkbox" name="notify_expiry_reminder" {% if s.notify_expiry_reminder %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="event-label">⏰ Expiry Reminder (3 days)</span>
+                </label>
+
+                <label class="event-toggle">
+                    <label class="toggle">
+                        <input type="checkbox" name="notify_login_failure" {% if s.notify_login_failure %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="event-label">⚠ Failed Login Attempt</span>
+                </label>
+
+                <label class="event-toggle">
+                    <label class="toggle">
+                        <input type="checkbox" name="notify_login_locked" {% if s.notify_login_locked %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="event-label">🔒 IP Lockout</span>
+                </label>
+
+                <label class="event-toggle">
+                    <label class="toggle">
+                        <input type="checkbox" name="notify_provision" {% if s.notify_provision %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="event-label">🔗 Provision URL Used</span>
+                </label>
             </div>
         </div>
 

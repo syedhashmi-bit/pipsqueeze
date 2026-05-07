@@ -68,8 +68,14 @@ This file tracks what has been built, what was fixed, and important decisions ma
 - [x] Notification settings with unsaved-changes guard
 - [x] LAN Access Mode per client — "Internet Only" (0.0.0.0/0), "LAN Only" (192.168.88.0/24), "Full Access" (both); stored as `access_mode` TEXT in clients table; three-button selector in create form and edit modal; badge in client list; shown in portal; clone inherits mode; regen and update_client respect/regenerate mode
 - [x] PipSqueeze logo (`/static/logo.png`) — favicon + apple-touch-icon in all 10 templates; 80px centered above login h1; 32px in index.html topbar brand-row (replaces ⚡ emoji); og-image.png copy at `/static/og-image.png` for social preview
-- [x] PWA manifest (`/static/manifest.json`) — standalone display, cyan theme-color, apple-mobile-web-app meta tags in all 10 templates
+- [x] PWA manifest (`/static/manifest.json`) + service worker (`/static/sw.js`) — standalone display, cyan theme-color, apple-mobile-web-app meta tags in all templates; SW caches / + static assets; Flask route `/sw.js` serves with correct MIME type
 - [x] Project folder renamed from `/var/www/vpn-dashboard` to `/var/www/pipsqueeze`; venv rebuilt (shebang paths); systemd service file updated; CLAUDE.md updated
+- [x] Bandwidth quota per client — `quota_mb` column in clients table; quota amount + unit (MB/GB) in create form and edit modal; progress bar (green/yellow/red) in client list; auto-disable in monitor thread when quota exceeded; `notify_quota` notification toggle
+- [x] Scheduled expiry reminders — monitor thread sends notification 3 days before client expires (once per day per client); `notify_expiry_reminder` toggle in notifications
+- [x] Login failure notifications — sends alert on each failed login attempt with IP + attempt count; sends lockout alert when IP is locked out; `notify_login_failure` and `notify_login_locked` toggles
+- [x] Auto-provision URLs — one-time links that create a WireGuard client on first visit (no login required); `provision_tokens` DB table; `/provision/manage` page; `provision.html` (shows config + QR), `provision_error.html`; inherits tags/access_mode/quota/expiry from token; `notify_provision` toggle; PROVISION button in topbar
+- [x] Multi-user admin accounts — `admin_users` table with bcrypt-hashed passwords + roles (admin/viewer); default admin seeded from .env on first run; login route uses DB; `admin_required` decorator for write routes; USERS button (admin only) in topbar; `/admin/users` management page; role badge in topbar
+- [x] MikroTik firewall rule sync — address-list approach: one DROP rule (`pipsqueeze-lan-block`) blocks "internet" mode clients from LAN; `add_to_lan_block`/`remove_from_lan_block` called on create/delete/toggle/bulk/provision/access_mode change; `sync_firewall_rules()` reconciles on monitor thread first run; firewall rule count in `/api/mt-health` response
 
 ---
 
@@ -109,13 +115,16 @@ This file tracks what has been built, what was fixed, and important decisions ma
 
 ## Things NOT Done Yet (future work)
 
-- [ ] Login attempt notifications (alert when someone fails login)
-- [ ] Mobile responsive overhaul (card layout for small screens)
-- [ ] PWA manifest (add to home screen)
-- [ ] Auto-provision URL (one-time link that creates a client when visited)
-- [ ] Bandwidth quota per client (auto-disable when limit hit)
+- [x] Mobile responsive overhaul (card layout for small screens)
+- [x] Historical uptime chart — 7-day uptime bar chart in /wireguard expand-row; `/api/uptime-history/<client>` endpoint
+- [x] Login attempt notifications (done — login_failure + login_locked toggles)
+- [x] PWA support (manifest + service worker + meta tags)
+- [x] Auto-provision URL
+- [x] Bandwidth quota per client
+- [x] Multi-user admin accounts
+- [x] MikroTik firewall rule sync
+- [x] Scheduled expiry reminders (3 days before)
 - [ ] Auto-cleanup (delete never-connected clients after X days)
-- [ ] Multi-user admin accounts (currently single hardcoded admin)
 - [ ] API key access for external scripts
 - [ ] WireGuard config import (register existing peers created outside dashboard)
 - [ ] Historical uptime % chart (currently just current 7-day percentage)

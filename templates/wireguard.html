@@ -153,7 +153,9 @@
         .expand-row.open{display:table-row;}
         .expand-cell{padding:0 !important;border:none !important;}
         .expand-inner{padding:16px 20px;background:rgba(0,0,0,0.3);border-bottom:1px solid rgba(0,200,255,0.08);}
-        .expand-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+        .expand-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
+        @media(max-width:900px){.expand-grid{grid-template-columns:1fr 1fr;}}
+        @media(max-width:600px){.expand-grid{grid-template-columns:1fr;}}
         .expand-section-title{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--cyan);opacity:.6;text-transform:uppercase;margin-bottom:10px;}
         .history-list{max-height:140px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;}
         .history-list::-webkit-scrollbar{width:3px;}
@@ -172,7 +174,20 @@
         .toast{position:fixed;bottom:22px;right:22px;padding:12px 17px;border-radius:4px;font-family:var(--mono);font-size:12.5px;display:none;z-index:9999;backdrop-filter:blur(12px);border-left:2px solid var(--cyan);background:rgba(0,14,28,0.95);color:var(--cyan);box-shadow:0 16px 40px rgba(0,0,0,0.5);letter-spacing:.04em;max-width:320px;}
         .toast.err{border-left-color:var(--red);color:#ff8090;}
 
-        @media(max-width:900px){body{padding:18px;}.topbar{flex-direction:column;}.topbar-right{justify-content:flex-start;}.stat-strip{grid-template-columns:repeat(2,1fr);}input,select{width:100%;}.toolbar{flex-direction:column;align-items:flex-start;}}
+        @media(max-width:900px){
+            body{padding:18px;}
+            .topbar{flex-direction:column;}
+            .topbar-right{justify-content:flex-start;}
+            .stat-strip{grid-template-columns:repeat(2,1fr);}
+            input,select{width:100%;}
+            .toolbar{flex-direction:column;align-items:flex-start;}
+        }
+        @media(max-width:500px){
+            body{padding:10px;}
+            .stat-strip{grid-template-columns:repeat(2,1fr);}
+            .main-card{padding:14px;}
+            input{min-width:0;}
+        }
     </style>
 </head>
 <body>
@@ -335,6 +350,12 @@
                                             <canvas id="chart-{{ loop.index }}"></canvas>
                                         </div>
                                     </div>
+                                    <div>
+                                        <div class="expand-section-title">// 7-DAY UPTIME TREND</div>
+                                        <div class="chart-wrap" style="height:110px;">
+                                            <canvas id="uptime-chart-{{ loop.index }}"></canvas>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </td>
@@ -360,7 +381,8 @@ const serverPeerData = {
     "{{ loop.index }}": {
         rxHistory: {{ peer.rx_history | tojson }},
         txHistory: {{ peer.tx_history | tojson }},
-        hsSecs: {{ peer.get('handshake_seconds', -1) }}
+        hsSecs: {{ peer.get('handshake_seconds', -1) }},
+        name: {{ (peer.get('comment') or '') | tojson }}
     },
     {% endfor %}
 };
@@ -406,6 +428,7 @@ function drawSparkline(idx,rxArr,txArr){
 
 // ── EXPANDED TRAFFIC CHARTS ──
 const expandCharts={};
+const uptimeCharts={};
 function drawExpandChart(idx,rxArr,txArr){
     const canvas=document.getElementById(`chart-${idx}`);
     if(!canvas)return;
@@ -430,6 +453,44 @@ function drawExpandChart(idx,rxArr,txArr){
             responsive:true,maintainAspectRatio:false
         }
     });
+}
+
+// ── 7-DAY UPTIME BAR CHART ──
+function drawUptimeChart(idx,name){
+    if(!name)return;
+    fetch('/api/uptime-history/'+encodeURIComponent(name))
+        .then(r=>r.json())
+        .then(data=>{
+            const canvas=document.getElementById(`uptime-chart-${idx}`);
+            if(!canvas)return;
+            const labels=data.map(d=>d.label);
+            const vals=data.map(d=>d.pct);
+            const bg=vals.map(v=>v===null?'rgba(61,96,112,0.2)':v>=90?'rgba(0,255,157,0.55)':v>=70?'rgba(255,201,64,0.55)':'rgba(255,64,96,0.55)');
+            const bc=vals.map(v=>v===null?'#3d6070':v>=90?'#00ff9d':v>=70?'#ffc940':'#ff4060');
+            if(uptimeCharts[idx]){uptimeCharts[idx].destroy();}
+            uptimeCharts[idx]=new Chart(canvas,{
+                type:'bar',
+                data:{
+                    labels,
+                    datasets:[{
+                        data:vals.map(v=>v===null?0:v),
+                        backgroundColor:bg,borderColor:bc,borderWidth:1,borderRadius:3
+                    }]
+                },
+                options:{
+                    animation:false,
+                    plugins:{
+                        legend:{display:false},
+                        tooltip:{callbacks:{label:ctx=>vals[ctx.dataIndex]===null?'No data':vals[ctx.dataIndex]+'%'}}
+                    },
+                    scales:{
+                        x:{ticks:{color:'#3d6070',font:{family:'Share Tech Mono',size:9}},grid:{color:'rgba(0,200,255,0.05)'}},
+                        y:{min:0,max:100,ticks:{color:'#3d6070',font:{family:'Share Tech Mono',size:9},callback:v=>v+'%'},grid:{color:'rgba(0,200,255,0.05)'}}
+                    },
+                    responsive:true,maintainAspectRatio:false
+                }
+            });
+        }).catch(()=>{});
 }
 
 // ── UPTIME DISPLAY ──
@@ -467,10 +528,10 @@ function toggleExpand(id,e){
     document.querySelectorAll('.expand-row.open').forEach(r=>{if(r.id!==id)r.classList.remove('open');});
     row.classList.toggle('open',!isOpen);
     if(!isOpen){
-        // Draw expand chart
         const idx=id.replace('exp-','');
         const d=serverPeerData[idx];
         if(d&&d.rxHistory.length)drawExpandChart(idx,d.rxHistory,d.txHistory);
+        if(d&&d.name)drawUptimeChart(idx,d.name);
     }
 }
 
@@ -622,6 +683,9 @@ function copyVisiblePeers(){
 })();
 
 setInterval(()=>loadPeers(false),5000);
+</script>
+<script>
+if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}
 </script>
 </body>
 </html>
