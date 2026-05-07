@@ -31,7 +31,13 @@ MAX_LOGIN_ATTEMPTS  = int(os.getenv("MAX_LOGIN_ATTEMPTS",  "5"))
 LOCKOUT_MINUTES     = int(os.getenv("LOCKOUT_MINUTES",     "15"))
 SESSION_TIMEOUT_MIN = int(os.getenv("SESSION_TIMEOUT_MIN", "30"))
 IP_WHITELIST_RAW    = os.getenv("IP_WHITELIST", "")
-WEEKLY_DIGEST_DAY   = os.getenv("WEEKLY_DIGEST_DAY", "monday").lower()  # day to send digest
+WEEKLY_DIGEST_DAY   = os.getenv("WEEKLY_DIGEST_DAY", "monday").lower()
+
+# MikroTik gateway map pin (WireGuard server location, not VPS location)
+MT_LOCATION_NAME = os.getenv("MT_LOCATION_NAME", "WireGuard Gateway")
+MT_LAT           = float(os.getenv("MT_LAT", "-42.8821"))
+MT_LON           = float(os.getenv("MT_LON", "147.3272"))
+MT_IFACE         = os.getenv("MT_WIREGUARD_INTERFACE", "WireGuard1")
 
 
 # ─────────────────────────────────────────────
@@ -1529,8 +1535,12 @@ def map_view():
             "uptime":   uptm,
         })
 
-    return render_template("map.html", clients=map_clients,
-                           clients_json=json.dumps(map_clients))
+    return render_template("map.html",
+                           clients=map_clients,
+                           clients_json=json.dumps(map_clients),
+                           mt_lat=MT_LAT, mt_lon=MT_LON,
+                           mt_name=MT_LOCATION_NAME,
+                           mt_iface=MT_IFACE)
 
 
 # ─────────────────────────────────────────────
