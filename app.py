@@ -35,10 +35,17 @@ IP_WHITELIST_RAW    = os.getenv("IP_WHITELIST", "")
 WEEKLY_DIGEST_DAY   = os.getenv("WEEKLY_DIGEST_DAY", "monday").lower()
 
 # MikroTik gateway map pin (WireGuard server location, not VPS location)
+# All three are optional — leave MT_LAT/MT_LON blank in .env to hide the gateway pin.
 MT_LOCATION_NAME = os.getenv("MT_LOCATION_NAME", "WireGuard Gateway")
-MT_LAT           = float(os.getenv("MT_LAT", "-42.8821"))
-MT_LON           = float(os.getenv("MT_LON", "147.3272"))
-MT_IFACE         = os.getenv("MT_WIREGUARD_INTERFACE", "WireGuard1")
+def _opt_float(name):
+    v = os.getenv(name, "").strip()
+    try:
+        return float(v) if v else None
+    except ValueError:
+        return None
+MT_LAT   = _opt_float("MT_LAT")
+MT_LON   = _opt_float("MT_LON")
+MT_IFACE = os.getenv("MT_WIREGUARD_INTERFACE", "WireGuard1")
 
 
 # ─────────────────────────────────────────────

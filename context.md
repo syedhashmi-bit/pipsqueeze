@@ -4,9 +4,9 @@
 The owner runs a MikroTik router at home with a WireGuard VPN interface. Previously, managing VPN clients meant SSH-ing into the router and running commands manually. PipSqueeze replaces that with a web UI — similar to how Tailscale works but fully self-hosted and connecting directly to the MikroTik RouterOS API.
 
 ## Infrastructure
-- **VPS**: Ubuntu 4GB RAM, Hetzner (Nuremberg)
-- **Domain**: `vpn.syedhashmi.trade`
-- **Router**: MikroTik (home network)
+- **VPS**: any Ubuntu host the deployer chooses (size, region, and provider all configurable)
+- **Domain**: deployer's choice — set `SERVER_IP` (or hostname) in `.env`
+- **Router**: MikroTik (home or office network)
 - **WireGuard interface name**: stored in `.env` as `MT_WIREGUARD_INTERFACE`
 - **VPN subnet**: `10.10.0.0/24` — clients get IPs from `10.10.0.2` to `10.10.0.254`
 - **Server public key, endpoint IP/port, DNS**: all in `.env`

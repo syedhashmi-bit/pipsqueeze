@@ -98,7 +98,7 @@ This file tracks what has been built, what was fixed, and important decisions ma
 | Create Client form missing from dashboard | `session.get('role') == 'admin'` returned False for stale pre-multi-user sessions; fixed by defaulting to 'admin' via `session.get('role', 'admin') == 'admin'` — users must re-login to get role in session |
 | Map page split dark/white, tiles not dark | Replaced OSM + CSS filter with CartoDB Dark Matter tiles natively; removed `.leaflet-tile` filter rule |
 | Map "No locations" overlay blocked map render | Removed full-page absolute overlay; replaced with small sidebar note; map now always renders regardless of client locations |
-| Map server pin was VPS (Nuremberg) not gateway | Replaced hardcoded Nuremberg pin with MikroTik WireGuard gateway pin; location driven by MT_LAT/MT_LON/MT_LOCATION_NAME env vars (default: Hobart, Tasmania); map route passes mt_lat/mt_lon/mt_name/mt_iface to template |
+| Map server pin was hardcoded VPS location, not gateway | Replaced hardcoded VPS pin with MikroTik WireGuard gateway pin; location driven by `MT_LAT`/`MT_LON`/`MT_LOCATION_NAME` env vars; if blank, the gateway pin is omitted and the map shows a neutral world view; map route passes `mt_lat`/`mt_lon`/`mt_name`/`mt_iface` to template |
 | endpoint-address not captured from MikroTik | Added endpoint_ip extraction in get_peers() (strips port from "1.2.3.4:51820" format) |
 
 ---

@@ -9,15 +9,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-PipSqueeze — a self-hosted WireGuard VPN management dashboard, like Tailscale but self-hosted — manages peers on a MikroTik router via the RouterOS API. Built in Python/Flask, deployed on a Ubuntu VPS (vpn.syedhashmi.trade) via gunicorn + nginx.
+PipSqueeze — a self-hosted WireGuard VPN management dashboard, like Tailscale but self-hosted — manages peers on a MikroTik router via the RouterOS API. Built in Python/Flask, deployed on a Ubuntu VPS via gunicorn + nginx.
 
 ## Deployment
 
 - **Service**: `vpn-dashboard` (gunicorn systemd unit)
-- **Domain**: `pipsqueeze.syedhashmi.trade`
 - **Project path**: `/var/www/pipsqueeze`
-- **VPS**: Ubuntu 4GB RAM, Hetzner Nuremberg
-- **LAN subnet**: `192.168.88.0/24` (MikroTik home network, router at `192.168.88.1`)
+- **VPS**: any Ubuntu host (domain, hosting provider, and VM size are deployer's choice)
+- **LAN subnet**: configurable via `LAN_SUBNET` env var (default `192.168.88.0/24` — MikroTik factory default)
 - **VPN subnet**: `10.10.0.0/24` (clients get `.2` to `.254`)
 - **Python venv**: `/var/www/pipsqueeze/venv`
 

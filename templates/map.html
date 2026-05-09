@@ -134,15 +134,16 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const clientData  = {{ clients_json|safe }};
-const GW_LAT      = {{ mt_lat }};
-const GW_LON      = {{ mt_lon }};
+const GW_LAT      = {{ mt_lat|tojson }};
+const GW_LON      = {{ mt_lon|tojson }};
 const GW_NAME     = {{ mt_name|tojson }};
 const GW_IFACE    = {{ mt_iface|tojson }};
+const HAS_GW      = (GW_LAT !== null && GW_LON !== null);
 
-// Init map centred on gateway
+// Init map: centre on gateway if configured, else neutral world view
 const map = L.map('map', {
-    center: [GW_LAT, GW_LON],
-    zoom: 4,
+    center: HAS_GW ? [GW_LAT, GW_LON] : [20, 0],
+    zoom: HAS_GW ? 4 : 2,
     zoomControl: true,
     attributionControl: false
 });
@@ -172,18 +173,20 @@ function makeIcon(color, size){
     });
 }
 
-// GATEWAY PIN (cyan, 24px)
-const gwMarker = L.marker([GW_LAT, GW_LON], {icon: makeIcon('#00c8ff', 24)});
-gwMarker.bindPopup(
-    '<div class="pop-name" style="color:#00c8ff;">🏠 MikroTik WireGuard Gateway</div>'
-    + '<div class="pop-row"><span>Location</span><span class="pop-val">' + GW_NAME + '</span></div>'
-    + '<div class="pop-row"><span>Interface</span><span class="pop-val" style="color:#00c8ff;">' + GW_IFACE + '</span></div>'
-);
-gwMarker.addTo(map);
+// GATEWAY PIN (cyan, 24px) — only when MT_LAT/MT_LON are configured
+if (HAS_GW) {
+    const gwMarker = L.marker([GW_LAT, GW_LON], {icon: makeIcon('#00c8ff', 24)});
+    gwMarker.bindPopup(
+        '<div class="pop-name" style="color:#00c8ff;">🏠 MikroTik WireGuard Gateway</div>'
+        + '<div class="pop-row"><span>Location</span><span class="pop-val">' + GW_NAME + '</span></div>'
+        + '<div class="pop-row"><span>Interface</span><span class="pop-val" style="color:#00c8ff;">' + GW_IFACE + '</span></div>'
+    );
+    gwMarker.addTo(map);
+}
 
 // CLIENT PINS
 const markers   = {};
-const allCoords = [[GW_LAT, GW_LON]];
+const allCoords = HAS_GW ? [[GW_LAT, GW_LON]] : [];
 
 clientData.forEach(function(c) {
     if (c.lat === null || c.lon === null) return;
@@ -215,10 +218,10 @@ clientData.forEach(function(c) {
 });
 
 // Fit bounds to include gateway + all client pins
-if (allCoords.length === 1) {
-    map.setView([GW_LAT, GW_LON], 4);
-} else if (allCoords.length === 2) {
-    map.setView(allCoords[1], 5);
+if (allCoords.length === 0) {
+    // no gateway, no clients — leave neutral world view
+} else if (allCoords.length === 1) {
+    map.setView(allCoords[0], 4);
 } else {
     map.fitBounds(allCoords, {padding: [60, 60]});
 }
