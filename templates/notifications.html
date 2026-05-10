@@ -184,11 +184,17 @@
             <div class="section-body {% if not s.discord_enabled %}muted{% endif %}" id="discordBody">
                 <div class="fields">
                     <div>
-                        <label class="fl">Webhook URL</label>
+                        <label class="fl">
+                            Webhook URL
+                            {% if secret_set.discord_webhook %}
+                                <span style="color:var(--green);font-size:11px;">— configured (leave blank to keep)</span>
+                            {% endif %}
+                        </label>
                         <div class="input-row">
                             <span class="i-icon">🔗</span>
-                            <input type="url" name="discord_webhook" value="{{ s.discord_webhook or '' }}"
-                                placeholder="https://discord.com/api/webhooks/...">
+                            <input type="url" name="discord_webhook" value=""
+                                autocomplete="off"
+                                placeholder="{% if secret_set.discord_webhook %}••••••••••••• (saved){% else %}https://discord.com/api/webhooks/...{% endif %}">
                         </div>
                     </div>
                 </div>
@@ -250,11 +256,17 @@
                         </div>
                     </div>
                     <div>
-                        <label class="fl">SMTP Password / App Password</label>
+                        <label class="fl">
+                            SMTP Password / App Password
+                            {% if secret_set.email_pass %}
+                                <span style="color:var(--green);font-size:11px;">— configured (leave blank to keep)</span>
+                            {% endif %}
+                        </label>
                         <div class="input-row">
                             <span class="i-icon">◉</span>
-                            <input type="password" name="email_pass" value="{{ s.email_pass or '' }}"
-                                placeholder="••••••••••••">
+                            <input type="password" name="email_pass" value=""
+                                autocomplete="new-password"
+                                placeholder="{% if secret_set.email_pass %}••••••••••••• (saved){% else %}••••••••••••{% endif %}">
                         </div>
                     </div>
                 </div>
@@ -318,11 +330,17 @@
             <div class="section-body {% if not s.telegram_enabled %}muted{% endif %}" id="telegramBody">
                 <div class="fields fields-2">
                     <div>
-                        <label class="fl">Bot Token</label>
+                        <label class="fl">
+                            Bot Token
+                            {% if secret_set.telegram_token %}
+                                <span style="color:var(--green);font-size:11px;">— configured (leave blank to keep)</span>
+                            {% endif %}
+                        </label>
                         <div class="input-row">
                             <span class="i-icon">🤖</span>
-                            <input type="text" name="telegram_token" value="{{ s.telegram_token or '' }}"
-                                placeholder="123456789:ABCdef...">
+                            <input type="text" name="telegram_token" value=""
+                                autocomplete="off"
+                                placeholder="{% if secret_set.telegram_token %}••••••••••••• (saved){% else %}123456789:ABCdef...{% endif %}">
                         </div>
                     </div>
                     <div>

@@ -186,7 +186,7 @@ def test_p0_vault_roundtrip_and_at_rest(test_app):
 # ─────────────────────────────────────────────
 
 def test_p1_memory_md_no_bcrypt_claim():
-    text = Path(f"{PROJECT}/memory.md").read_text()
+    text = Path(f"{PROJECT}/MEMORY.md").read_text()
     # Should no longer claim bcrypt; should mention Werkzeug or scrypt
     assert "bcrypt-hashed" not in text
 

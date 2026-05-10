@@ -671,10 +671,26 @@
                                                 {% if c.disabled %}▶{% else %}⏸{% endif %}
                                             </button>
                                         </form>
-                                        <button class="btn btn-ghost btn-sm" onclick="openRename('{{ c.name }}')" title="Rename">✎</button>
-                                        <button class="btn btn-ghost btn-sm" onclick="openEdit('{{ c.name }}','{{ c.notes|replace("'","\\'") }}','{{ c.expires_at or "" }}','{{ c.tags or "" }}','{{ c.location or "" }}','{{ c.lat or "" }}','{{ c.lon or "" }}','{{ c.access_mode or "internet" }}',{{ c.quota_mb or 'null' }},{{ c.total_rx or 0 }},{{ c.total_tx or 0 }})" title="Edit settings">⚙</button>
-                                        <button class="btn btn-ghost btn-sm" onclick="openClone('{{ c.name }}')" title="Clone client">⎘</button>
-                                        <button class="btn btn-ghost btn-sm" onclick="copyPortal('{{ url_for("portal", token=c.portal_token, _external=True) }}')" title="Copy portal link">🔗</button>
+                                        <button class="btn btn-ghost btn-sm js-open-rename"
+                                                data-name="{{ c.name }}" title="Rename">✎</button>
+                                        <button class="btn btn-ghost btn-sm js-open-edit"
+                                                data-name="{{ c.name }}"
+                                                data-notes="{{ c.notes or '' }}"
+                                                data-expires="{{ c.expires_at or '' }}"
+                                                data-tags="{{ c.tags or '' }}"
+                                                data-location="{{ c.location or '' }}"
+                                                data-lat="{{ c.lat or '' }}"
+                                                data-lon="{{ c.lon or '' }}"
+                                                data-access-mode="{{ c.access_mode or 'internet' }}"
+                                                data-quota-mb="{{ c.quota_mb or '' }}"
+                                                data-rx="{{ c.total_rx or 0 }}"
+                                                data-tx="{{ c.total_tx or 0 }}"
+                                                title="Edit settings">⚙</button>
+                                        <button class="btn btn-ghost btn-sm js-open-clone"
+                                                data-name="{{ c.name }}" title="Clone client">⎘</button>
+                                        <button class="btn btn-ghost btn-sm js-copy-portal"
+                                                data-portal-url="{{ url_for('portal', token=c.portal_token, _external=True) }}"
+                                                title="Copy portal link">🔗</button>
                                         <form method="post" action="{{ url_for('rotate_portal', client=c.name) }}" onsubmit="return confirm('Rotate portal link for {{ c.name }}? Old link stops working.')">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                             <button class="btn btn-yellow btn-sm" type="submit" title="Rotate portal link">🔄</button>
@@ -1048,6 +1064,26 @@ function openClone(name){
     document.getElementById('cloneInput').value=name+'_copy';
     openModal('cloneModal','cloneInput');
 }
+
+// Delegated handlers — click bindings used to be inline `onclick="openEdit(...)"`
+// with raw Jinja interpolation, which let any value with an apostrophe (tags,
+// location, access_mode, notes) break out of the JS string and execute.
+// Reading from data-* attributes is autoescape-safe.
+document.addEventListener('click', function(ev){
+    const renameBtn = ev.target.closest('.js-open-rename');
+    if(renameBtn){ openRename(renameBtn.dataset.name); return; }
+    const cloneBtn = ev.target.closest('.js-open-clone');
+    if(cloneBtn){ openClone(cloneBtn.dataset.name); return; }
+    const portalBtn = ev.target.closest('.js-copy-portal');
+    if(portalBtn){ copyPortal(portalBtn.dataset.portalUrl); return; }
+    const editBtn = ev.target.closest('.js-open-edit');
+    if(editBtn){
+        const d = editBtn.dataset;
+        const quota = d.quotaMb ? parseInt(d.quotaMb) : null;
+        openEdit(d.name, d.notes, d.expires, d.tags, d.location,
+                 d.lat, d.lon, d.accessMode, quota, d.rx, d.tx);
+    }
+});
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 document.querySelectorAll('.modal-bg').forEach(m=>{
     m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});

@@ -122,7 +122,9 @@
                 <td style="font-family:var(--mono);font-size:12px;color:var(--muted-mid);">{{ u.created_at[:10] }}</td>
                 <td>
                     <div class="td-actions">
-                        <button class="btn btn-ghost btn-sm" onclick="openPwModal({{ u.id }}, '{{ u.username }}')">CHANGE PW</button>
+                        <button class="btn btn-ghost btn-sm js-open-pw"
+                                data-uid="{{ u.id }}"
+                                data-username="{{ u.username }}">CHANGE PW</button>
                         {% if u.username != current_user %}
                         <form method="post" action="{{ url_for('admin_users_change_role', uid=u.id) }}" style="display:inline;">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -197,6 +199,12 @@ function openPwModal(uid, username) {
     document.getElementById('pwInput').value = '';
     document.getElementById('pwModal').classList.add('open');
 }
+// Delegated handler — replaces inline onclick with raw Jinja interpolation,
+// which let any apostrophe-bearing username break out of the JS string.
+document.addEventListener('click', function(ev){
+    const b = ev.target.closest('.js-open-pw');
+    if(b){ openPwModal(b.dataset.uid, b.dataset.username); }
+});
 document.querySelectorAll('.modal-bg').forEach(bg => {
     bg.addEventListener('click', e => { if(e.target === bg) bg.classList.remove('open'); });
 });

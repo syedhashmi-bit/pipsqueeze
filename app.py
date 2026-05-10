@@ -3,12 +3,13 @@ from flask import (Flask, render_template, request, send_file,
                    session, redirect, url_for, flash, jsonify,
                    Response, send_from_directory)
 from flask_wtf.csrf import CSRFProtect, CSRFError, generate_csrf
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from functools import wraps
 import subprocess, os, re, sqlite3, qrcode, pyotp, shutil
 import secrets, zipfile, threading, time, psutil, csv, io, json
-import urllib.request, urllib.error
+import urllib.request, urllib.error, urllib.parse, ipaddress, socket
 from werkzeug.security import generate_password_hash, check_password_hash
 import notifications as notif
 
@@ -16,7 +17,13 @@ load_dotenv()
 
 app = Flask(__name__)
 application = app
+# Trust X-Forwarded-* from exactly one proxy hop (nginx).
+# Without this, get_client_ip() honors a client-supplied X-Forwarded-For,
+# letting an attacker forge IPs for the whitelist / rate-limit / audit log.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.secret_key = os.getenv("SECRET_KEY")
+if not app.secret_key:
+    raise RuntimeError("SECRET_KEY is not set; refusing to start.")
 
 # ─────────────────────────────────────────────
 # Security hardening
@@ -41,7 +48,44 @@ def _csrf_error(e):
     if request.path.startswith("/api/") or request.is_json:
         return jsonify({"error": "csrf", "reason": e.description}), 400
     flash(f"Security check failed ({e.description}). Please reload and try again.", "error")
-    return redirect(request.referrer or url_for("home"))
+    # Only follow the referrer if it points back at our own host — otherwise
+    # an attacker-controlled Referer header turns this handler into an open redirect.
+    ref = request.referrer or ""
+    same_origin = False
+    if ref:
+        try:
+            same_origin = urllib.parse.urlparse(ref).netloc == request.host
+        except Exception:
+            same_origin = False
+    return redirect(ref if same_origin else url_for("home"))
+
+
+@app.after_request
+def _security_headers(resp):
+    # Defense-in-depth headers. CSP intentionally permits 'unsafe-inline' for
+    # scripts/styles because the templates still rely on inline handlers and
+    # style attributes; tightening that requires a separate refactor.
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    resp.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net "
+        "https://unpkg.com https://nominatim.openstreetmap.org; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com "
+        "https://unpkg.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' https://nominatim.openstreetmap.org "
+        "https://ipapi.co; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
+    if app.config.get("SESSION_COOKIE_SECURE"):
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return resp
 
 
 @app.context_processor
@@ -52,6 +96,12 @@ def _inject_csrf():
 USERNAME          = os.getenv("APP_USERNAME")
 PASSWORD          = os.getenv("APP_PASSWORD")
 TOTP_SECRET       = os.getenv("TOTP_SECRET")
+# Refuse to start with empty/missing creds — otherwise the seeded admin
+# would default to the literal "changeme" password.
+if not USERNAME or not PASSWORD:
+    raise RuntimeError("APP_USERNAME and APP_PASSWORD must be set; refusing to start.")
+if not TOTP_SECRET:
+    raise RuntimeError("TOTP_SECRET is not set; refusing to start.")
 SERVER_PUBLIC_KEY = os.getenv("SERVER_PUBLIC_KEY")
 SERVER_IP         = os.getenv("SERVER_IP")
 SERVER_PORT       = os.getenv("SERVER_PORT")
@@ -88,6 +138,86 @@ def _opt_int(name):
     except ValueError:
         return 0
 AUTO_CLEANUP_DAYS = _opt_int("AUTO_CLEANUP_DAYS")
+
+
+# ─────────────────────────────────────────────
+# SSRF guards for notification destinations
+# ─────────────────────────────────────────────
+# Notification settings are operator-controlled (admin_required is enforced
+# below) but the values still flow into outbound HTTP/SMTP, so reject obvious
+# internal-network targets to make the metadata-service / link-local pivot
+# class of attack unreachable even if an admin account is compromised.
+
+_DISCORD_HOSTS = {"discord.com", "discordapp.com", "ptb.discord.com", "canary.discord.com"}
+
+
+def _host_is_internal(host: str) -> bool:
+    if not host:
+        return True
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        return True
+    for info in infos:
+        try:
+            addr = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            continue
+        if (addr.is_private or addr.is_loopback or addr.is_link_local
+                or addr.is_multicast or addr.is_reserved or addr.is_unspecified):
+            return True
+    return False
+
+
+def validate_discord_webhook(url: str) -> str | None:
+    """Return None if the URL is a valid Discord webhook, else an error string."""
+    if not url:
+        return None
+    try:
+        p = urllib.parse.urlparse(url)
+    except Exception:
+        return "malformed URL"
+    if p.scheme != "https":
+        return "must be https://"
+    host = (p.hostname or "").lower()
+    if host not in _DISCORD_HOSTS:
+        return "host must be discord.com or discordapp.com"
+    if not p.path.startswith("/api/webhooks/"):
+        return "path must start with /api/webhooks/"
+    return None
+
+
+def validate_smtp_host(host: str) -> str | None:
+    """Reject empty/internal-network SMTP hosts to prevent SSRF."""
+    if not host:
+        return None
+    host = host.strip()
+    # Only allow hostnames or public IPs. Reject anything that resolves to a
+    # private/loopback/link-local/etc. address.
+    if _host_is_internal(host):
+        return "rejected: SMTP host resolves to an internal/private network"
+    return None
+
+
+def validate_telegram_token(token: str) -> str | None:
+    """Telegram tokens look like '123456:ABC-DEF…'. Reject anything with control or URL chars."""
+    if not token:
+        return None
+    if re.search(r"[\s/?&#@]", token):
+        return "contains characters not valid in a Telegram bot token"
+    return None
+
+
+def _wg_keypair() -> tuple[str, str]:
+    """Generate a WireGuard private/public keypair without invoking a shell.
+    The previous f-string + shell=True form was unnecessary risk if `wg` ever
+    returned content with shell metacharacters."""
+    priv = subprocess.check_output(["wg", "genkey"], text=True).strip()
+    pub = subprocess.run(
+        ["wg", "pubkey"],
+        input=priv, text=True, capture_output=True, check=True
+    ).stdout.strip()
+    return priv, pub
 
 
 # ─────────────────────────────────────────────
@@ -1133,6 +1263,9 @@ def login():
                 totp = pyotp.TOTP(TOTP_SECRET)
                 if totp.verify(code):
                     clear_attempts(ip)
+                    # Defeat session fixation: drop any pre-login session id
+                    # before we mark this session as authenticated.
+                    session.clear()
                     session["logged_in"]   = True
                     session["last_active"] = datetime.utcnow().isoformat()
                     session["login_ip"]    = ip
@@ -1201,7 +1334,7 @@ def security_page():
 
 
 @app.route("/security/unlock/<ip_addr>", methods=["POST"])
-@login_required
+@admin_required
 def unlock_ip(ip_addr):
     clear_attempts(ip_addr)
     add_log(f"Manually unlocked IP {ip_addr}")
@@ -1210,7 +1343,7 @@ def unlock_ip(ip_addr):
 
 
 @app.route("/security/clear-audit", methods=["POST"])
-@login_required
+@admin_required
 def clear_audit():
     conn = get_db_connection()
     conn.execute("DELETE FROM login_audit")
@@ -1234,6 +1367,10 @@ def home():
     new_client_portal_url = None
 
     if request.method == "POST":
+        # Mutating action — viewers must not be able to create clients via direct POST.
+        if session.get("role") != "admin":
+            flash("Admin access required.")
+            return redirect(url_for("home"))
         client   = request.form["client"].strip()
         notes    = request.form.get("notes", "").strip()
         tags     = ",".join(t.strip() for t in request.form.get("tags","").split(",") if t.strip())
@@ -1266,8 +1403,7 @@ def home():
             flash("No available IPs left in the pool.")
             return redirect(url_for("home"))
 
-        private_key = subprocess.check_output("wg genkey", shell=True).decode().strip()
-        public_key  = subprocess.check_output(f"echo {private_key} | wg pubkey", shell=True).decode().strip()
+        private_key, public_key = _wg_keypair()
 
         config = f"""[Interface]
 PrivateKey = {private_key}
@@ -1380,7 +1516,7 @@ PersistentKeepalive = 25
 # ─────────────────────────────────────────────
 
 @app.route("/download/<client>")
-@login_required
+@admin_required
 def download(client):
     path = f"clients/{client}.conf"
     if not os.path.exists(path):
@@ -1390,7 +1526,7 @@ def download(client):
 
 
 @app.route("/delete/<client>", methods=["POST"])
-@login_required
+@admin_required
 def delete_client(client):
     mt_error = None
     try:
@@ -1420,7 +1556,7 @@ def delete_client(client):
 
 
 @app.route("/rename/<client>", methods=["POST"])
-@login_required
+@admin_required
 def rename_client(client):
     new_name = request.form.get("new_name", "").strip()
     if not is_valid_client_name(new_name):
@@ -1450,7 +1586,7 @@ def rename_client(client):
 
 
 @app.route("/update/<client>", methods=["POST"])
-@login_required
+@admin_required
 def update_client(client):
     notes       = request.form.get("notes", "").strip()
     tags        = ",".join(t.strip() for t in request.form.get("tags","").split(",") if t.strip())
@@ -1506,7 +1642,7 @@ def update_client(client):
 
 
 @app.route("/clone/<client>", methods=["POST"])
-@login_required
+@admin_required
 def clone_client(client):
     src = get_client(client)
     if not src:
@@ -1522,8 +1658,7 @@ def clone_client(client):
     if not client_ip:
         flash("No IPs left."); return redirect(url_for("home"))
 
-    private_key  = subprocess.check_output("wg genkey", shell=True).decode().strip()
-    public_key   = subprocess.check_output(f"echo {private_key} | wg pubkey", shell=True).decode().strip()
+    private_key, public_key = _wg_keypair()
     src_mode     = src["access_mode"] or "internet"
     allowed_ips  = build_allowed_ips(src_mode)
 
@@ -1562,7 +1697,7 @@ PersistentKeepalive = 25
 
 
 @app.route("/toggle/<client>", methods=["POST"])
-@login_required
+@admin_required
 def toggle_client(client):
     row = get_client(client)
     if not row:
@@ -1591,7 +1726,7 @@ def toggle_client(client):
 
 
 @app.route("/bulk-action", methods=["POST"])
-@login_required
+@admin_required
 def bulk_action():
     action  = request.form.get("bulk_action")
     clients = request.form.getlist("selected_clients")
@@ -1642,7 +1777,7 @@ def bulk_action():
 
 
 @app.route("/regen/<client>", methods=["POST"])
-@login_required
+@admin_required
 def regen_client(client):
     row = get_client(client)
     if not row:
@@ -1650,8 +1785,7 @@ def regen_client(client):
     client_ip   = row["ip"]
     access_mode = row["access_mode"] or "internet"
     allowed_ips = build_allowed_ips(access_mode)
-    private_key = subprocess.check_output("wg genkey", shell=True).decode().strip()
-    public_key  = subprocess.check_output(f"echo {private_key} | wg pubkey", shell=True).decode().strip()
+    private_key, public_key = _wg_keypair()
     config = f"""[Interface]
 PrivateKey = {private_key}
 Address = {client_ip}/24
@@ -1680,7 +1814,7 @@ PersistentKeepalive = 25
 
 
 @app.route("/rotate-portal/<client>", methods=["POST"])
-@login_required
+@admin_required
 def rotate_portal(client):
     new_token = secrets.token_urlsafe(24)
     conn = get_db_connection()
@@ -1710,7 +1844,7 @@ def all_logs():
 # ─────────────────────────────────────────────
 
 @app.route("/qr/<client>")
-@login_required
+@admin_required
 def qr_code(client):
     path = f"qr_codes/{client}.png"
     if not os.path.exists(path): return "QR not found", 404
@@ -1718,7 +1852,7 @@ def qr_code(client):
 
 
 @app.route("/backup")
-@login_required
+@admin_required
 def backup():
     zip_path = "/tmp/vpn_backup.zip"
     with zipfile.ZipFile(zip_path,"w",zipfile.ZIP_DEFLATED) as zf:
@@ -1727,7 +1861,13 @@ def backup():
                 for fname in os.listdir(folder):
                     zf.write(f"{folder}/{fname}", f"{folder}/{fname}")
         if os.path.exists(DB_FILE): zf.write(DB_FILE, DB_FILE)
-        ns = notif.get_settings()
+        # Strip decrypted credentials from the JSON dump — the DB itself still
+        # contains encrypted-at-rest copies, so this is the redundant decrypted
+        # snapshot we shouldn't be writing to a downloadable archive.
+        ns = dict(notif.get_settings())
+        for k in ("discord_webhook", "email_pass", "telegram_token"):
+            if ns.get(k):
+                ns[k] = "<redacted; see encrypted column in DB>"
         zf.writestr("notification_settings.json", json.dumps(ns, indent=2))
     add_log("Downloaded backup ZIP")
     return send_file(zip_path, as_attachment=True, download_name="vpn_backup.zip")
@@ -1737,17 +1877,27 @@ def backup():
 @login_required
 def export_csv():
     clients = get_all_clients()
+
+    def _csv_safe(v):
+        # Defang Excel/LibreOffice formula injection: prefix any cell starting
+        # with a formula trigger character with a single quote.
+        s = "" if v is None else str(v)
+        if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
+            return "'" + s
+        return s
+
     def generate():
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(["Name","IP","Tags","Notes","Location","Lat","Lon","Status",
                          "Expires","Last Seen","Total RX","Total TX","Created"])
         for c in clients:
-            writer.writerow([c["name"],c["ip"],c["tags"] or "",c["notes"] or "",
-                             c["location"] or "",c["lat"] or "",c["lon"] or "",
-                             "Disabled" if c["disabled"] else "Enabled",
-                             c["expires_at"] or "",c["last_seen"] or "Never",
-                             fmt_bytes(c["total_rx"]),fmt_bytes(c["total_tx"]),c["created_at"]])
+            row = [c["name"], c["ip"], c["tags"] or "", c["notes"] or "",
+                   c["location"] or "", c["lat"] or "", c["lon"] or "",
+                   "Disabled" if c["disabled"] else "Enabled",
+                   c["expires_at"] or "", c["last_seen"] or "Never",
+                   fmt_bytes(c["total_rx"]), fmt_bytes(c["total_tx"]), c["created_at"]]
+            writer.writerow([_csv_safe(v) for v in row])
         yield output.getvalue()
     add_log("Exported CSV")
     return Response(generate(), mimetype="text/csv",
@@ -1884,7 +2034,7 @@ def wireguard():
 
 
 @app.route("/wireguard/enable/<peer_id>", methods=["POST"])
-@login_required
+@admin_required
 def enable_peer(peer_id):
     mt = MikroTikAPI(); mt.connect(); mt.enable_peer(peer_id); mt.disconnect()
     add_log(f"Enabled peer {peer_id}"); flash("Peer enabled")
@@ -1892,7 +2042,7 @@ def enable_peer(peer_id):
 
 
 @app.route("/wireguard/disable/<peer_id>", methods=["POST"])
-@login_required
+@admin_required
 def disable_peer(peer_id):
     mt = MikroTikAPI(); mt.connect(); mt.disable_peer(peer_id); mt.disconnect()
     add_log(f"Disabled peer {peer_id}"); flash("Peer disabled")
@@ -2054,13 +2204,24 @@ def service_worker():
 # ─────────────────────────────────────────────
 
 @app.route("/notifications")
-@login_required
+@admin_required
 def notifications_page():
-    return render_template("notifications.html", s=notif.get_settings())
+    s = dict(notif.get_settings())
+    # Don't render decrypted credentials back into the HTML — instead expose
+    # which fields are set, so the template can show a placeholder. The user
+    # leaves the field blank to keep the existing value or types a new one.
+    secret_set = {
+        "discord_webhook": bool(s.get("discord_webhook")),
+        "email_pass":      bool(s.get("email_pass")),
+        "telegram_token":  bool(s.get("telegram_token")),
+    }
+    for k in secret_set:
+        s[k] = ""
+    return render_template("notifications.html", s=s, secret_set=secret_set)
 
 
 @app.route("/notifications/save", methods=["POST"])
-@login_required
+@admin_required
 def notifications_save():
     def ib(k): return 1 if request.form.get(k) else 0
     def sv(k,d=""): return request.form.get(k,d).strip()
@@ -2068,19 +2229,46 @@ def notifications_save():
         try: return int(request.form.get(k,d))
         except: return d
 
+    # Preserve existing secret-shaped fields when the form submits a blank value
+    # (the page renders placeholders rather than the real values to avoid leaking
+    # credentials into the rendered HTML).
+    existing = notif.get_settings()
+    def keep_or_new(k):
+        v = sv(k)
+        return v if v else (existing.get(k) or "")
+
+    discord_webhook = keep_or_new("discord_webhook")
+    email_pass      = keep_or_new("email_pass")
+    telegram_token  = keep_or_new("telegram_token")
+    email_host      = sv("email_host")
+
+    # SSRF guards
+    err = validate_discord_webhook(discord_webhook)
+    if err:
+        flash(f"Discord webhook rejected: {err}.")
+        return redirect(url_for("notifications_page"))
+    err = validate_smtp_host(email_host)
+    if err:
+        flash(f"SMTP host rejected: {err}.")
+        return redirect(url_for("notifications_page"))
+    err = validate_telegram_token(telegram_token)
+    if err:
+        flash(f"Telegram token rejected: {err}.")
+        return redirect(url_for("notifications_page"))
+
     data = {
         "discord_enabled":   ib("discord_enabled"),
-        "discord_webhook":   sv("discord_webhook"),
+        "discord_webhook":   discord_webhook,
         "email_enabled":     ib("email_enabled"),
-        "email_host":        sv("email_host"),
+        "email_host":        email_host,
         "email_port":        iv("email_port",587),
         "email_user":        sv("email_user"),
-        "email_pass":        sv("email_pass"),
+        "email_pass":        email_pass,
         "email_from":        sv("email_from"),
         "email_to":          sv("email_to"),
         "email_tls":         ib("email_tls"),
         "telegram_enabled":  ib("telegram_enabled"),
-        "telegram_token":    sv("telegram_token"),
+        "telegram_token":    telegram_token,
         "telegram_chat_id":  sv("telegram_chat_id"),
         "notify_connect":          ib("notify_connect"),
         "notify_disconnect":       ib("notify_disconnect"),
@@ -2101,7 +2289,7 @@ def notifications_save():
 
 
 @app.route("/notifications/test", methods=["POST"])
-@login_required
+@admin_required
 def notifications_test():
     def ib(k): return 1 if request.form.get(k) else 0
     def sv(k,d=""): return request.form.get(k,d).strip()
@@ -2109,26 +2297,44 @@ def notifications_test():
         try: return int(request.form.get(k,d))
         except: return d
 
+    # Same secret-preserving logic as save: when the user clicks "test" without
+    # re-entering a credential, fall back to the stored value.
+    existing = notif.get_settings()
+    def keep_or_new(k):
+        v = sv(k)
+        return v if v else (existing.get(k) or "")
+
+    discord_webhook = keep_or_new("discord_webhook")
+    email_pass      = keep_or_new("email_pass")
+    telegram_token  = keep_or_new("telegram_token")
+    email_host      = sv("email_host")
+
+    for err in (validate_discord_webhook(discord_webhook),
+                validate_smtp_host(email_host),
+                validate_telegram_token(telegram_token)):
+        if err:
+            return jsonify([{"channel": "Validation", "ok": False, "error": err}])
+
     data = {
         "discord_enabled":  ib("discord_enabled"),
-        "discord_webhook":  sv("discord_webhook"),
+        "discord_webhook":  discord_webhook,
         "email_enabled":    ib("email_enabled"),
-        "email_host":       sv("email_host"),
+        "email_host":       email_host,
         "email_port":       iv("email_port",587),
         "email_user":       sv("email_user"),
-        "email_pass":       sv("email_pass"),
+        "email_pass":       email_pass,
         "email_from":       sv("email_from"),
         "email_to":         sv("email_to"),
         "email_tls":        ib("email_tls"),
         "telegram_enabled": ib("telegram_enabled"),
-        "telegram_token":   sv("telegram_token"),
+        "telegram_token":   telegram_token,
         "telegram_chat_id": sv("telegram_chat_id"),
     }
     return jsonify(notif.test_all(data))
 
 
 @app.route("/api/send-digest", methods=["POST"])
-@login_required
+@admin_required
 def api_send_digest():
     try:
         send_weekly_digest()
@@ -2142,7 +2348,7 @@ def api_send_digest():
 # ─────────────────────────────────────────────
 
 @app.route("/reset-db", methods=["POST"])
-@login_required
+@admin_required
 def reset_db():
     conn = get_db_connection()
     for tbl in ["clients","traffic_history","peer_events","ping_history","uptime_log"]:
@@ -2154,7 +2360,7 @@ def reset_db():
 
 
 @app.route("/reset-all", methods=["POST"])
-@login_required
+@admin_required
 def reset_all():
     try:
         mt = MikroTikAPI(); mt.connect(); mt.delete_dashboard_peers(); mt.disconnect()
@@ -2179,7 +2385,7 @@ def reset_all():
 # ─────────────────────────────────────────────
 
 @app.route("/provision/manage")
-@login_required
+@admin_required
 def provision_manage():
     conn   = get_db_connection()
     tokens = conn.execute("SELECT * FROM provision_tokens ORDER BY id DESC").fetchall()
@@ -2189,7 +2395,7 @@ def provision_manage():
 
 
 @app.route("/provision/create", methods=["POST"])
-@login_required
+@admin_required
 def provision_create():
     label       = request.form.get("label","").strip()
     tags        = ",".join(t.strip() for t in request.form.get("tags","").split(",") if t.strip())
@@ -2232,14 +2438,14 @@ def provision_use(token):
 
     # Build client name from label + short random suffix
     base      = re.sub(r"[^a-zA-Z0-9_]", "_", pt["label"] or "client")[:20].strip("_") or "client"
-    suffix    = secrets.token_urlsafe(3).lower().replace("-","").replace("_","")[:4]
+    suffix    = secrets.token_hex(4)
     client    = f"{base}_{suffix}"
 
     # Ensure name is unique
     for attempt in range(10):
         if not get_client(client):
             break
-        suffix = secrets.token_urlsafe(3).lower().replace("-","").replace("_","")[:4]
+        suffix = secrets.token_hex(4)
         client = f"{base}_{suffix}"
 
     client_ip = get_next_ip()
@@ -2248,8 +2454,7 @@ def provision_use(token):
 
     access_mode = pt["access_mode"] or "internet"
     allowed_ips = build_allowed_ips(access_mode)
-    private_key = subprocess.check_output("wg genkey", shell=True).decode().strip()
-    public_key  = subprocess.check_output(f"echo {private_key} | wg pubkey", shell=True).decode().strip()
+    private_key, public_key = _wg_keypair()
 
     config = f"""[Interface]
 PrivateKey = {private_key}
@@ -2297,7 +2502,7 @@ PersistentKeepalive = 25
 
 
 @app.route("/provision/delete/<int:token_id>", methods=["POST"])
-@login_required
+@admin_required
 def provision_delete(token_id):
     conn = get_db_connection()
     pt   = conn.execute("SELECT * FROM provision_tokens WHERE id=?", (token_id,)).fetchone()
@@ -2623,6 +2828,9 @@ def admin_users_add():
     if not username or not password:
         flash("Username and password are required.")
         return redirect(url_for("admin_users_page"))
+    if not re.match(r"^[a-zA-Z0-9_.-]{1,32}$", username):
+        flash("Username may only contain letters, digits, '_', '.', '-' (max 32 chars).")
+        return redirect(url_for("admin_users_page"))
     if role not in ("admin", "viewer"):
         role = "viewer"
     conn = get_db_connection()
@@ -2730,4 +2938,7 @@ monitor_thread = threading.Thread(target=_monitor_loop, daemon=True)
 monitor_thread.start()
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Debug only enables itself when explicitly opted in via env, so
+    # `python app.py` in production doesn't accidentally expose Werkzeug's
+    # debugger / arbitrary code execution.
+    app.run(debug=os.getenv("FLASK_DEBUG") == "1")
