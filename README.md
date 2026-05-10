@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="120" height="120" alt="PipSqueeze" src="https://github.com/user-attachments/assets/b790ee14-16e8-432c-982b-ec50f4f67905" />
+  <img width="160" height="160" alt="PipSqueeze" src="static/logo.png" />
 </p>
 
 <h1 align="center">PipSqueeze</h1>
