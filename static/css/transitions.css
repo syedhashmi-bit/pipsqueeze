@@ -1,0 +1,123 @@
+/* PipSqueeze — shared seamless-transition layer.
+   Loaded into every admin/portal template. Falls back gracefully on browsers
+   that don't support the View Transitions API (Firefox <128 just navigates). */
+
+/* Cross-document MPA View Transitions: same-origin same-document navigations
+   morph through an automatic root crossfade. Browsers without support ignore
+   the rule entirely. */
+@view-transition { navigation: auto; }
+
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: .32s;
+    animation-timing-function: cubic-bezier(.22, 1, .36, 1);
+}
+::view-transition-old(root) {
+    animation-name: vt-fade-out;
+}
+::view-transition-new(root) {
+    animation-name: vt-fade-in;
+}
+@keyframes vt-fade-out {
+    to { opacity: 0; transform: translateY(-6px); }
+}
+@keyframes vt-fade-in {
+    from { opacity: 0; transform: translateY(8px); }
+}
+
+/* Modal entry. Existing JS toggles `.open` on `.modal-bg`; this layer adds
+   a scale+fade in (no exit animation — modals dismiss instantly, which is
+   fine and avoids JS coordination). */
+.modal-bg.open {
+    animation: pip-modal-bg-in .22s ease-out both;
+}
+.modal-bg.open .modal {
+    animation: pip-modal-in .28s cubic-bezier(.22, 1, .36, 1) both;
+}
+@keyframes pip-modal-bg-in {
+    from { opacity: 0; backdrop-filter: blur(0); }
+    to   { opacity: 1; }
+}
+@keyframes pip-modal-in {
+    from { opacity: 0; transform: translateY(10px) scale(.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Toast slide-in. Activated by `.toast.show` (set by transitions.js wrapper
+   around showToast). Existing inline `display:block` toggle is preserved by
+   the wrapper so legacy callers still work. */
+.toast.show {
+    animation: pip-toast-in .28s cubic-bezier(.22, 1, .36, 1) both;
+}
+.toast.hide {
+    animation: pip-toast-out .2s ease-in both;
+}
+@keyframes pip-toast-in {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pip-toast-out {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(14px); }
+}
+
+/* Top progress bar — slim cyan strip that runs during form submissions /
+   same-document navigation to telegraph "something is happening" instead of
+   the page just freezing for a beat. */
+#pip-progress {
+    position: fixed;
+    top: 0; left: 0;
+    height: 2px; width: 0;
+    background: linear-gradient(90deg, transparent, #00c8ff, #00ff9d);
+    box-shadow: 0 0 10px rgba(0, 200, 255, .55);
+    z-index: 99999;
+    transition: width .25s cubic-bezier(.4, 0, .2, 1), opacity .25s ease;
+    opacity: 0;
+    pointer-events: none;
+}
+#pip-progress.run { opacity: 1; }
+
+/* Flash messages — if templates render server-side flash banners, give them
+   a graceful entrance. Targets the common `.flash` / `.flash-msg` patterns. */
+.flash, .flash-msg, .alert-flash {
+    animation: pip-flash-in .34s cubic-bezier(.22, 1, .36, 1) both;
+}
+@keyframes pip-flash-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Smoother button press feedback across the app. Doesn't touch hover styles
+   already defined per-template; only adds an active depress. */
+button:not(:disabled):active,
+.btn:not(:disabled):active {
+    transform: translateY(1px) scale(.99);
+    transition: transform .08s ease;
+}
+
+/* Smoother link transitions inside the topbar and nav rows. The existing
+   templates already have `transition: all .2s` on most buttons; this layer
+   normalizes anchor + form submits that lacked it. */
+a, a:visited { transition: color .2s, opacity .2s; }
+
+/* Respect prefers-reduced-motion. Disables every animation/transition added
+   by this file; the View Transitions API also honors this OS-level setting
+   natively, so cross-page nav becomes a hard cut. */
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+        animation: none !important;
+    }
+    .modal-bg.open,
+    .modal-bg.open .modal,
+    .toast.show,
+    .toast.hide,
+    .flash, .flash-msg, .alert-flash {
+        animation: none !important;
+    }
+    #pip-progress { display: none !important; }
+    button:not(:disabled):active,
+    .btn:not(:disabled):active {
+        transform: none !important;
+    }
+}

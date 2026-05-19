@@ -14,6 +14,8 @@
     <meta name="apple-mobile-web-app-title" content="PipSqueeze">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="stylesheet" href="/static/css/transitions.css">
+    <script src="/static/js/transitions.js" defer></script>
     <style>
         :root{
             --bg:#030508;--surface:#060c13;--panel:rgba(6,14,24,0.93);
@@ -156,9 +158,12 @@
         label.fl{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;color:var(--cyan);opacity:.7;text-transform:uppercase;margin-bottom:7px;}
         .input-row{position:relative;display:flex;align-items:center;margin-bottom:7px;}
         .i-icon{position:absolute;left:11px;font-size:13px;color:var(--cyan);opacity:.3;pointer-events:none;}
-        input[type=text],input[type=search],input[type=date],textarea{width:100%;padding:11px 11px 11px 34px;background:rgba(0,200,255,0.04);border:1px solid rgba(0,200,255,0.13);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;transition:all .2s;}
-        body.light input[type=text],body.light input[type=search],body.light input[type=date],body.light textarea{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.15);}
-        input[type=text]:focus,input[type=search]:focus,input[type=date]:focus,textarea:focus{border-color:var(--cyan);background:rgba(0,200,255,0.07);box-shadow:0 0 0 3px rgba(0,200,255,0.08);}
+        input[type=text],input[type=search],input[type=date],input[type=number],textarea{width:100%;padding:11px 11px 11px 34px;background:rgba(0,200,255,0.04);border:1px solid rgba(0,200,255,0.13);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;transition:all .2s;}
+        body.light input[type=text],body.light input[type=search],body.light input[type=date],body.light input[type=number],body.light textarea{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.15);}
+        input[type=text]:focus,input[type=search]:focus,input[type=date]:focus,input[type=number]:focus,textarea:focus{border-color:var(--cyan);background:rgba(0,200,255,0.07);box-shadow:0 0 0 3px rgba(0,200,255,0.08);}
+        /* Hide native number-input spinners so the quota field matches the tactical mono aesthetic */
+        input[type=number]{-moz-appearance:textfield;}
+        input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
         input::placeholder,textarea::placeholder{color:rgba(61,96,112,0.6);}
         textarea{resize:vertical;min-height:56px;padding-left:12px;}
         input[type=date]{color-scheme:dark;}
