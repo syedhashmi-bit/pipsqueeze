@@ -8,10 +8,11 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from functools import wraps
 import subprocess, os, re, sqlite3, qrcode, pyotp, shutil
-import secrets, zipfile, threading, time, psutil, csv, io, json
+import secrets, zipfile, threading, time, psutil, csv, io, json, base64
 import urllib.request, urllib.error, urllib.parse, ipaddress, socket
 from werkzeug.security import generate_password_hash, check_password_hash
 import notifications as notif
+import vault
 
 load_dotenv()
 
@@ -373,7 +374,8 @@ def init_db():
             username     TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             role         TEXT DEFAULT 'viewer',
-            created_at   TEXT NOT NULL
+            created_at   TEXT NOT NULL,
+            totp_secret  TEXT DEFAULT NULL
         )
     """)
 
@@ -417,6 +419,18 @@ def init_db():
         if col not in existing:
             conn.execute(f"ALTER TABLE clients ADD COLUMN {col} {defn}")
 
+    # Migrate admin_users table — per-user TOTP secret. NULL means the user
+    # falls back to the env TOTP_SECRET (shared with anyone else still on NULL).
+    # Recovery: if an admin locks themselves out after enrolling a personal
+    # secret, run:
+    #   sqlite3 vpn_dashboard.db "UPDATE admin_users SET totp_secret=NULL WHERE username='<them>';"
+    admin_existing = [r[1] for r in conn.execute("PRAGMA table_info(admin_users)").fetchall()]
+    for col, defn in [
+        ("totp_secret", "TEXT DEFAULT NULL"),
+    ]:
+        if col not in admin_existing:
+            conn.execute(f"ALTER TABLE admin_users ADD COLUMN {col} {defn}")
+
     # Migrate notifications table
     notif_existing = [r[1] for r in conn.execute("PRAGMA table_info(notifications)").fetchall()]
     for col, defn in [
@@ -435,7 +449,6 @@ def init_db():
     # Migrate any plaintext notification secrets to Fernet-encrypted at rest.
     # Idempotent: re-encrypts only fields that aren't already encrypted.
     try:
-        import vault
         if vault.migrate_settings():
             print("[vault] Migrated plaintext notification secrets to encrypted storage.")
     except Exception as e:
@@ -1260,7 +1273,12 @@ def login():
             conn_u.close()
             valid_creds = db_user and check_password_hash(db_user["password_hash"], pw)
             if valid_creds:
-                totp = pyotp.TOTP(TOTP_SECRET)
+                # Per-user TOTP secret if enrolled, else fall back to the
+                # shared env secret (so users created before this feature
+                # keep working until an admin runs them through RESET 2FA).
+                user_totp_enc = db_user["totp_secret"] if "totp_secret" in db_user.keys() else None
+                user_totp = vault.decrypt(user_totp_enc) if user_totp_enc else None
+                totp = pyotp.TOTP(user_totp or TOTP_SECRET)
                 if totp.verify(code):
                     clear_attempts(ip)
                     # Defeat session fixation: drop any pre-login session id
@@ -2814,9 +2832,13 @@ def admin_users_page():
     conn  = get_db_connection()
     users = conn.execute("SELECT * FROM admin_users ORDER BY created_at").fetchall()
     conn.close()
+    # Surface per-row 2FA enrollment state so the template can show a
+    # SHARED vs PERSONAL badge without exposing the actual secret.
+    has_personal_2fa = {u["id"]: bool(u["totp_secret"]) for u in users}
     return render_template("admin_users.html", users=users,
                            current_user=session.get("username"),
-                           current_role=session.get("role"))
+                           current_role=session.get("role"),
+                           has_personal_2fa=has_personal_2fa)
 
 
 @app.route("/admin/users/add", methods=["POST"])
@@ -2927,6 +2949,57 @@ def admin_users_change_role(uid):
     flash(f"Role updated for '{target['username']}'.")
     conn.close()
     return redirect(url_for("admin_users_page"))
+
+
+@app.route("/admin/users/reset-2fa/<int:uid>", methods=["POST"])
+@admin_required
+def admin_users_reset_2fa(uid):
+    conn   = get_db_connection()
+    target = conn.execute("SELECT * FROM admin_users WHERE id=?", (uid,)).fetchone()
+    if not target:
+        flash("User not found.")
+        conn.close()
+        return redirect(url_for("admin_users_page"))
+    new_secret = pyotp.random_base32()
+    conn.execute(
+        "UPDATE admin_users SET totp_secret=? WHERE id=?",
+        (vault.encrypt(new_secret), uid),
+    )
+    conn.commit()
+    conn.close()
+    add_log(f"Reset 2FA for admin user '{target['username']}'")
+    # One-shot session stash: the enrollment page reads + clears these so
+    # the plaintext secret never re-renders on refresh.
+    session["pending_enrollment"] = {
+        "uid":      uid,
+        "username": target["username"],
+        "secret":   new_secret,
+    }
+    return redirect(url_for("admin_users_enroll", uid=uid))
+
+
+@app.route("/admin/users/enroll/<int:uid>", methods=["GET"])
+@admin_required
+def admin_users_enroll(uid):
+    pending = session.get("pending_enrollment")
+    if not pending or pending.get("uid") != uid:
+        flash("No pending enrollment for this user. Click RESET 2FA to generate one.")
+        return redirect(url_for("admin_users_page"))
+    secret   = pending["secret"]
+    username = pending["username"]
+    # Build provisioning URI (otpauth://...) and a QR data URL the
+    # template can drop straight into an <img src=...>.
+    uri = pyotp.TOTP(secret).provisioning_uri(name=username, issuer_name="PipSqueeze")
+    img = qrcode.make(uri)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    qr_data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    # Clear after rendering: refreshing the page won't redisplay the secret.
+    session.pop("pending_enrollment", None)
+    return render_template("admin_users_enroll.html",
+                           username=username, secret=secret,
+                           qr_data_url=qr_data_url, uri=uri,
+                           is_self=(username == session.get("username")))
 
 
 # ─────────────────────────────────────────────

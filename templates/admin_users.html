@@ -54,6 +54,10 @@
         .badge-admin{background:var(--cyan-dim);color:var(--cyan);border:1px solid rgba(0,200,255,0.2);}
         .badge-viewer{background:var(--yellow-dim);color:var(--yellow);border:1px solid rgba(255,201,64,0.2);}
         .badge-you{background:var(--green-dim);color:var(--green);border:1px solid rgba(0,255,157,0.2);margin-left:6px;}
+        .badge-2fa-personal{background:var(--green-dim);color:var(--green);border:1px solid rgba(0,255,157,0.2);}
+        .badge-2fa-shared{background:var(--yellow-dim);color:var(--yellow);border:1px solid rgba(255,201,64,0.2);}
+        .btn-yellow{background:var(--yellow-dim);border:1px solid rgba(255,201,64,0.3);color:var(--yellow);}
+        .btn-yellow:hover{background:rgba(255,201,64,0.14);}
         .td-actions{display:flex;gap:6px;flex-wrap:wrap;}
         .flash{padding:12px 16px;border-radius:3px;font-family:var(--mono);font-size:12px;margin-bottom:18px;}
         .flash.ok{background:var(--green-dim);border:1px solid rgba(0,255,157,0.2);color:var(--green);}
@@ -107,6 +111,7 @@
                 <tr>
                     <th>USERNAME</th>
                     <th>ROLE</th>
+                    <th>2FA</th>
                     <th>CREATED</th>
                     <th>ACTIONS</th>
                 </tr>
@@ -121,12 +126,24 @@
                 <td>
                     <span class="badge {% if u.role == 'admin' %}badge-admin{% else %}badge-viewer{% endif %}">{{ u.role|upper }}</span>
                 </td>
+                <td>
+                    {% if has_personal_2fa.get(u.id) %}
+                    <span class="badge badge-2fa-personal" title="Per-user TOTP secret enrolled">PERSONAL</span>
+                    {% else %}
+                    <span class="badge badge-2fa-shared" title="Using the shared TOTP_SECRET from .env">SHARED</span>
+                    {% endif %}
+                </td>
                 <td style="font-family:var(--mono);font-size:12px;color:var(--muted-mid);">{{ u.created_at[:10] }}</td>
                 <td>
                     <div class="td-actions">
                         <button class="btn btn-ghost btn-sm js-open-pw"
                                 data-uid="{{ u.id }}"
                                 data-username="{{ u.username }}">CHANGE PW</button>
+                        <form method="post" action="{{ url_for('admin_users_reset_2fa', uid=u.id) }}" style="display:inline;"
+                              onsubmit="return confirm('Reset 2FA for {{ u.username }}? A new secret will be generated. The old authenticator entry will stop working immediately — make sure to re-scan the QR before logging out.');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <button class="btn btn-yellow btn-sm" type="submit" title="Generate a fresh per-user TOTP secret">⟲ RESET 2FA</button>
+                        </form>
                         {% if u.username != current_user %}
                         <form method="post" action="{{ url_for('admin_users_change_role', uid=u.id) }}" style="display:inline;">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>

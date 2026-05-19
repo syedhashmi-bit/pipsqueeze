@@ -173,6 +173,89 @@ def test_api_v1_with_invalid_key_rejected(live_url):
     assert r.status_code == 401
 
 
+# ─────────────────────────────────────────────
+# Per-user TOTP enrollment (end-to-end UI walk)
+# ─────────────────────────────────────────────
+
+def test_admin_users_shows_2fa_badge_column(page: Page, live_url, test_credentials):
+    """The admin users page must surface PERSONAL vs SHARED 2FA state."""
+    login(page, live_url, test_credentials)
+    page.goto(f"{live_url}/admin/users")
+    # Column header
+    expect(page.locator("th", has_text="2FA")).to_be_visible()
+    # The test admin row starts with NULL totp_secret → SHARED badge
+    expect(page.locator(".badge-2fa-shared").first).to_be_visible()
+    # RESET 2FA button visible for the test admin
+    expect(page.locator("button", has_text="RESET 2FA").first).to_be_visible()
+
+
+def test_reset_2fa_full_flow(page: Page, live_url, test_credentials, test_db_path):
+    """End-to-end: click RESET 2FA → enrollment page renders QR + secret →
+    DB has encrypted secret → badge flips to PERSONAL → cleanup restores
+    NULL so other tests keep using env fallback."""
+    import sqlite3, re
+    login(page, live_url, test_credentials)
+    page.goto(f"{live_url}/admin/users")
+
+    # Auto-accept the confirm() dialog
+    page.on("dialog", lambda d: d.accept())
+
+    # Submit the RESET 2FA form for the test admin (the first/only user)
+    with page.expect_navigation(wait_until="load"):
+        page.locator("button", has_text="RESET 2FA").first.click()
+
+    # Should now be on the enrollment page
+    assert "/admin/users/enroll/" in page.url, f"expected enroll redirect, at {page.url}"
+    expect(page.locator("h1")).to_contain_text("ENROLL 2FA")
+    # QR is rendered as a data URL
+    qr = page.locator("img[src^='data:image/png;base64,']")
+    expect(qr).to_be_visible()
+    # Secret box renders Base32
+    secret_text = page.locator(".secret-box").inner_text().strip()
+    assert re.fullmatch(r"[A-Z2-7]{16,64}", secret_text), f"unexpected secret: {secret_text!r}"
+    # Raw URI shown
+    expect(page.locator(".uri-box")).to_contain_text("otpauth://totp/")
+
+    # DB inspection — secret must be encrypted at rest (test_http_smoke.py
+    # covers the decrypt round-trip; here we only need to confirm the column
+    # was populated and is ciphertext, not plaintext.)
+    conn = sqlite3.connect(test_db_path)
+    stored = conn.execute(
+        "SELECT totp_secret FROM admin_users WHERE username=?",
+        (test_credentials["username"],),
+    ).fetchone()[0]
+    conn.close()
+    assert stored is not None and stored.startswith("enc:"), f"not encrypted: {stored!r}"
+    assert secret_text not in stored, "plaintext secret leaked into DB"
+
+    # Returning to /admin/users should now show PERSONAL for this user
+    page.goto(f"{live_url}/admin/users")
+    expect(page.locator(".badge-2fa-personal").first).to_be_visible()
+
+    # Refreshing the enroll page must NOT redisplay the secret — session was
+    # consumed. (We can't easily extract the uid from the URL, so re-derive
+    # it from the DB.)
+    conn = sqlite3.connect(test_db_path)
+    uid = conn.execute(
+        "SELECT id FROM admin_users WHERE username=?",
+        (test_credentials["username"],),
+    ).fetchone()[0]
+    conn.close()
+    page.goto(f"{live_url}/admin/users/enroll/{uid}")
+    # Should redirect back to the users page (no session-pending secret)
+    assert page.url.endswith("/admin/users"), f"expected redirect, at {page.url}"
+
+    # Cleanup: restore NULL so subsequent tests still log in via env fallback.
+    conn = sqlite3.connect(test_db_path)
+    conn.execute(
+        "UPDATE admin_users SET totp_secret=NULL WHERE username=?",
+        (test_credentials["username"],),
+    )
+    conn.execute("DELETE FROM login_attempts")
+    conn.commit()
+    conn.close()
+
+
 def test_api_v1_uptime_history_clamps_to_max(live_url, test_credentials):
     """The days param should clamp to 90; verify via login session."""
     import requests

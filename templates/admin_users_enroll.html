@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PipSqueeze — Enroll 2FA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="/static/logo.png">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#00c8ff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="PipSqueeze">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="stylesheet" href="/static/css/transitions.css">
+    <script src="/static/js/transitions.js" defer></script>
+    <style>
+        :root{--bg:#030508;--surface:#060c13;--panel:rgba(6,14,24,0.93);--border:rgba(0,200,255,0.1);--border-lit:rgba(0,200,255,0.4);--cyan:#00c8ff;--cyan-dim:rgba(0,200,255,0.07);--green:#00ff9d;--green-dim:rgba(0,255,157,0.07);--red:#ff4060;--red-dim:rgba(255,64,96,0.09);--yellow:#ffc940;--yellow-dim:rgba(255,201,64,0.09);--text:#c8e0ee;--muted:#3d6070;--muted-mid:#6a8ea0;--mono:'Share Tech Mono',monospace;--display:'Rajdhani',sans-serif;}
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:var(--display);background:var(--bg);color:var(--text);min-height:100vh;padding:28px 32px;}
+        .bg-layer{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+        .grid-overlay{position:absolute;inset:0;background-image:linear-gradient(rgba(0,200,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,0.04) 1px,transparent 1px);background-size:44px 44px;animation:gridMove 20s linear infinite;}
+        @keyframes gridMove{to{background-position:44px 44px;}}
+        .scanlines{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.12) 3px,rgba(0,0,0,0.12) 4px);}
+        .gs{position:absolute;border-radius:50%;filter:blur(140px);}
+        .gs1{width:900px;height:900px;background:#001830;top:-350px;left:-300px;opacity:.5;}
+        .gs2{width:600px;height:600px;background:#001020;bottom:-200px;right:-200px;opacity:.4;}
+        .page{max-width:680px;margin:auto;position:relative;z-index:1;}
+        .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid var(--border);}
+        .brand{display:flex;align-items:center;gap:12px;}
+        .brand img{width:36px;height:36px;}
+        .brand-label{font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--cyan);opacity:.7;}
+        h1{font-size:24px;font-weight:700;letter-spacing:.05em;}
+        .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 15px;border-radius:3px;font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.06em;cursor:pointer;text-decoration:none;transition:all .2s;white-space:nowrap;border:none;}
+        .btn-ghost{background:var(--cyan-dim);border:1px solid var(--border-lit);color:var(--cyan);}
+        .btn-ghost:hover{background:rgba(0,200,255,0.12);}
+        .btn-green{background:var(--green-dim);border:1px solid rgba(0,255,157,0.3);color:var(--green);}
+        .btn-green:hover{background:rgba(0,255,157,0.14);}
+        .panel{background:var(--panel);border:1px solid var(--border-lit);border-radius:6px;padding:24px 26px;margin-bottom:18px;}
+        .warn{background:var(--red-dim);border:1px solid rgba(255,64,96,0.3);border-left:3px solid var(--red);border-radius:4px;padding:13px 16px;margin-bottom:18px;font-family:var(--mono);font-size:12.5px;color:#ff8090;line-height:1.5;}
+        .qr-wrap{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;}
+        .qr-box{background:#fff;padding:12px;border-radius:6px;flex-shrink:0;}
+        .qr-box img{display:block;width:200px;height:200px;}
+        .secret-side{flex:1;min-width:260px;}
+        .step{margin-bottom:18px;}
+        .step-num{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--cyan);opacity:.7;margin-bottom:5px;}
+        .step-text{font-size:14px;color:var(--text);line-height:1.5;}
+        .secret-box{font-family:var(--mono);font-size:14px;background:var(--cyan-dim);border:1px solid rgba(0,200,255,0.2);border-radius:3px;padding:11px 14px;color:var(--cyan);word-break:break-all;letter-spacing:.05em;margin-top:6px;user-select:all;cursor:text;}
+        .uri-row{margin-top:14px;}
+        .uri-label{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:5px;}
+        .uri-box{font-family:var(--mono);font-size:11px;background:rgba(0,200,255,0.04);border:1px solid var(--border);border-radius:3px;padding:9px 12px;color:var(--muted-mid);word-break:break-all;user-select:all;}
+        .actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;}
+        .recovery{font-family:var(--mono);font-size:11px;color:var(--muted);background:rgba(255,201,64,0.05);border:1px dashed rgba(255,201,64,0.25);border-radius:3px;padding:10px 13px;margin-top:14px;line-height:1.55;}
+        .recovery code{color:var(--yellow);}
+    </style>
+</head>
+<body>
+<div class="bg-layer">
+    <div class="grid-overlay"></div><div class="scanlines"></div>
+    <div class="gs gs1"></div><div class="gs gs2"></div>
+</div>
+<div class="page">
+    <div class="topbar">
+        <div class="brand">
+            <a href="{{ url_for('home') }}"><img src="/static/logo.png" alt="logo"></a>
+            <div>
+                <div class="brand-label">PIPSQUEEZE // ADMIN</div>
+                <h1>ENROLL 2FA — {{ username|upper }}</h1>
+            </div>
+        </div>
+        <a href="{{ url_for('admin_users_page') }}" class="btn btn-ghost">← USERS</a>
+    </div>
+
+    <div class="warn">
+        ⚠ This secret is shown <strong>once</strong>. Scan the QR code in your authenticator
+        app (or paste the secret) <strong>before leaving this page</strong>.
+        {% if is_self %}
+        You will need a valid code from this new secret on your next login —
+        the env-based shared secret no longer applies to your account.
+        {% endif %}
+    </div>
+
+    <div class="panel">
+        <div class="step">
+            <div class="step-num">// STEP 1</div>
+            <div class="step-text">Open your authenticator app (Google Authenticator, Authy, 1Password, etc.) and scan this QR code:</div>
+        </div>
+
+        <div class="qr-wrap">
+            <div class="qr-box">
+                <img src="{{ qr_data_url }}" alt="2FA QR code">
+            </div>
+            <div class="secret-side">
+                <div class="step">
+                    <div class="step-num">// OR ENTER MANUALLY</div>
+                    <div class="step-text">Account: <strong>PipSqueeze ({{ username }})</strong></div>
+                    <div class="step-text" style="margin-top:6px;">Key:</div>
+                    <div class="secret-box">{{ secret }}</div>
+                </div>
+                <div class="step">
+                    <div class="step-num">// TYPE</div>
+                    <div class="step-text">TOTP &middot; 30s &middot; 6 digits &middot; SHA-1</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="uri-row">
+            <div class="uri-label">RAW OTPAUTH URI</div>
+            <div class="uri-box">{{ uri }}</div>
+        </div>
+
+        <div class="recovery">
+            <strong>LOCKED OUT?</strong> If you can't log in after enrolling, an admin with SSH
+            access can clear this user's 2FA back to the shared env secret with:
+            <code>sqlite3 /var/www/pipsqueeze/vpn_dashboard.db "UPDATE admin_users SET totp_secret=NULL WHERE username='{{ username }}';"</code>
+        </div>
+
+        <div class="actions">
+            <a href="{{ url_for('admin_users_page') }}" class="btn btn-green">✓ DONE — RETURN TO USERS</a>
+        </div>
+    </div>
+</div>
+</body>
+</html>

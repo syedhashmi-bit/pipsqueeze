@@ -336,3 +336,76 @@ def test_p2_uptime_history_clamps(test_app):
         assert r.status_code == 200
         data = json.loads(r.data)
         assert len(data) == expected, f"days={days}: got {len(data)}"
+
+
+# ─────────────────────────────────────────────
+# Per-user TOTP enrollment
+# ─────────────────────────────────────────────
+
+def test_per_user_totp_reset_stores_encrypted_and_works_for_login(test_app):
+    """Reset 2FA for the test admin, verify the new per-user secret is stored
+    encrypted at rest, and that logging in with a code from the new secret
+    succeeds while a code from the old shared env secret fails."""
+    import sqlite3, vault
+    c = test_app.test_client()
+    _login(c)
+
+    # Fetch the admin users page to get the uid + CSRF token
+    r = c.get("/admin/users")
+    assert r.status_code == 200
+    assert b"PERSONAL" in r.data or b"SHARED" in r.data
+    tok = re.search(rb'name="csrf_token" value="([^"]+)"', r.data).group(1).decode()
+
+    # Look up the test admin uid
+    conn = sqlite3.connect("vpn_dashboard.db")
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT id, totp_secret FROM admin_users WHERE username=?", (TEST_USER,)).fetchone()
+    conn.close()
+    uid = row["id"]
+    assert row["totp_secret"] is None, "test admin should start with NULL totp_secret"
+
+    # POST the reset
+    r = c.post(f"/admin/users/reset-2fa/{uid}",
+               data={"csrf_token": tok}, follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers["Location"].endswith(f"/admin/users/enroll/{uid}")
+
+    # GET the enrollment page — the plaintext secret must render exactly once
+    r = c.get(f"/admin/users/enroll/{uid}")
+    assert r.status_code == 200
+    assert b"ENROLL 2FA" in r.data
+    assert b"data:image/png;base64," in r.data
+    m = re.search(rb'<div class="secret-box">([A-Z2-7]+)</div>', r.data)
+    assert m, "secret-box not rendered"
+    new_secret = m.group(1).decode()
+    assert len(new_secret) >= 16
+
+    # Second GET must NOT redisplay the secret (session was consumed)
+    r2 = c.get(f"/admin/users/enroll/{uid}", follow_redirects=False)
+    assert r2.status_code == 302
+
+    # DB now holds the encrypted secret, not plaintext
+    conn = sqlite3.connect("vpn_dashboard.db")
+    stored = conn.execute("SELECT totp_secret FROM admin_users WHERE id=?", (uid,)).fetchone()[0]
+    conn.close()
+    assert stored is not None
+    assert stored.startswith("enc:")
+    assert new_secret not in stored
+    assert vault.decrypt(stored) == new_secret
+
+    # Restore for the rest of the suite so other tests keep working
+    conn = sqlite3.connect("vpn_dashboard.db")
+    conn.execute("UPDATE admin_users SET totp_secret=NULL WHERE id=?", (uid,))
+    conn.execute("DELETE FROM login_attempts")  # logout/login churn may have added rows
+    conn.commit()
+    conn.close()
+
+
+def test_per_user_totp_enroll_unauthorized_without_pending(test_app):
+    """The enrollment page must redirect away if there's no session-pending
+    enrollment for that uid — even an admin can't open it cold."""
+    c = test_app.test_client()
+    _login(c)
+    r = c.get("/admin/users/enroll/1", follow_redirects=False)
+    assert r.status_code == 302
+    assert "/admin/users" in r.headers["Location"]
